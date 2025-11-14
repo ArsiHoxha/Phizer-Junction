@@ -46,27 +46,34 @@ export default function AnalysisScreen() {
     screenTimeMinutes: 0,
     notificationCount: 0,
     activityLevel: 'light',
+    screenTimeToday: 0,
   };
 
   const sleepData = latestData?.sleep || {
-    totalSleepMinutes: 0,
-    quality: 0,
+    totalSleepMinutes: 420,
+    quality: 75,
     sleepDebt: 0,
+    deepSleepMinutes: 120,
   };
 
-  const weatherData = latestData?.weather || {
-    weather: {
-      temperature: 20,
-      humidity: 50,
-      pressure: 1013,
-      uvIndex: 3,
-    },
+  const weatherData = latestData?.weather?.weather || {
+    temperature: 20,
+    humidity: 50,
+    pressure: 1013,
+    uvIndex: 3,
+    condition: 'clear',
   };
 
   const calendarData = latestData?.calendar || {
     eventsToday: 0,
-    stressScore: 0,
+    busyHoursToday: 0,
   };
+
+  // Calculate derived values
+  const screenTimeHours = Math.round((phoneData.screenTimeMinutes || phoneData.screenTimeToday || 0) / 60 * 10) / 10;
+  const sleepHours = Math.round((sleepData.totalSleepMinutes || 0) / 60 * 10) / 10;
+  const deepSleepHours = Math.round((sleepData.deepSleepMinutes || 0) / 60 * 10) / 10;
+  const qualityScore = sleepData.quality || 0;
 
   const getMetricChartData = (metric: 'hrv' | 'stress' | 'heartRate') => {
     if (historicalData.length < 2) {
@@ -79,8 +86,24 @@ export default function AnalysisScreen() {
       ];
     }
 
-    const dataPoints = historicalData.slice(-10);
-    return dataPoints.map((d, i) => ({ 
+    // Filter data based on selected period
+    let dataPoints = historicalData;
+    const now = new Date();
+    
+    if (selectedPeriod === '24h') {
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      dataPoints = historicalData.filter(d => new Date(d.timestamp) >= oneDayAgo);
+    } else if (selectedPeriod === '7d') {
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      dataPoints = historicalData.filter(d => new Date(d.timestamp) >= sevenDaysAgo);
+    } else if (selectedPeriod === '30d') {
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      dataPoints = historicalData.filter(d => new Date(d.timestamp) >= thirtyDaysAgo);
+    }
+
+    // Take last 15 points for better visualization
+    const displayPoints = dataPoints.slice(-15);
+    return displayPoints.map((d, i) => ({ 
       value: d[metric] || 0,
       label: `${i + 1}`
     }));
@@ -136,23 +159,23 @@ export default function AnalysisScreen() {
 
         {/* Period Selector */}
         <View className="px-6 mb-6">
-          <View className="flex-row space-x-3">
+          <View className="flex-row justify-center space-x-2">
             {periods.map((period) => (
               <TouchableOpacity
                 key={period}
                 onPress={() => setSelectedPeriod(period)}
                 style={{
-                  backgroundColor: selectedPeriod === period ? colors.primary : (isDark ? '#1a1a1a' : '#f5f5f5'),
+                  backgroundColor: selectedPeriod === period ? colors.primary : 'transparent',
                   borderColor: selectedPeriod === period ? colors.primary : colors.border,
                 }}
-                className="flex-1 py-3 rounded-full border items-center"
+                className="px-5 py-1.5 rounded-full border"
                 activeOpacity={0.7}
               >
                 <Text
                   style={{
-                    color: selectedPeriod === period ? '#fff' : colors.text,
-                    fontWeight: selectedPeriod === period ? '600' : '400',
+                    color: selectedPeriod === period ? '#fff' : colors.textSecondary,
                   }}
+                  className="text-xs font-semibold"
                 >
                   {period}
                 </Text>
@@ -371,7 +394,7 @@ export default function AnalysisScreen() {
               <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
                 <View className="items-center py-8">
                   <Text style={{ color: colors.text }} className="text-6xl font-bold mb-2">
-                    {Math.round(phoneData.screenTimeToday / 60)}h
+                    {screenTimeHours}h
                   </Text>
                   <Text style={{ color: colors.textSecondary }} className="text-base">
                     Today's Screen Time
@@ -380,11 +403,11 @@ export default function AnalysisScreen() {
                 <View className="mt-4 flex-row justify-between border-t pt-4" style={{ borderColor: colors.border }}>
                   <View>
                     <Text style={{ color: colors.textSecondary }} className="text-xs">Activity Level</Text>
-                    <Text style={{ color: colors.text }} className="text-lg font-bold capitalize">{phoneData.activityLevel}</Text>
+                    <Text style={{ color: colors.text }} className="text-lg font-bold capitalize">{phoneData.activityLevel || 'light'}</Text>
                   </View>
                   <View>
                     <Text style={{ color: colors.textSecondary }} className="text-xs">Notifications</Text>
-                    <Text style={{ color: colors.warning }} className="text-lg font-bold">{phoneData.notificationCount}</Text>
+                    <Text style={{ color: colors.warning }} className="text-lg font-bold">{phoneData.notificationCount || 0}</Text>
                   </View>
                 </View>
               </View>
@@ -402,7 +425,7 @@ export default function AnalysisScreen() {
               <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
                 <View className="items-center py-8">
                   <Text style={{ color: colors.text }} className="text-6xl font-bold mb-2">
-                    {sleepData.hoursSlept}h
+                    {sleepHours}h
                   </Text>
                   <Text style={{ color: colors.textSecondary }} className="text-base">
                     Last Night's Sleep
@@ -411,11 +434,11 @@ export default function AnalysisScreen() {
                 <View className="mt-4 flex-row justify-between border-t pt-4" style={{ borderColor: colors.border }}>
                   <View>
                     <Text style={{ color: colors.textSecondary }} className="text-xs">Quality Score</Text>
-                    <Text style={{ color: colors.success }} className="text-lg font-bold">{sleepData.qualityScore}%</Text>
+                    <Text style={{ color: colors.success }} className="text-lg font-bold">{Math.round(qualityScore)}%</Text>
                   </View>
                   <View>
                     <Text style={{ color: colors.textSecondary }} className="text-xs">Deep Sleep</Text>
-                    <Text style={{ color: colors.primary }} className="text-lg font-bold">{sleepData.deepSleepHours}h</Text>
+                    <Text style={{ color: colors.primary }} className="text-lg font-bold">{deepSleepHours}h</Text>
                   </View>
                 </View>
               </View>
@@ -438,24 +461,24 @@ export default function AnalysisScreen() {
               <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
                 <View className="items-center py-8">
                   <Text style={{ color: colors.text }} className="text-6xl font-bold mb-2">
-                    {Math.round(weatherData.temperature)}°
+                    {Math.round(weatherData.temperature || 20)}°
                   </Text>
                   <Text style={{ color: colors.textSecondary }} className="text-base capitalize">
-                    {weatherData.condition}
+                    {weatherData.condition || 'Unknown'}
                   </Text>
                 </View>
                 <View className="mt-4 border-t pt-4" style={{ borderColor: colors.border }}>
                   <View className="flex-row justify-between mb-3">
                     <Text style={{ color: colors.textSecondary }} className="text-sm">Humidity</Text>
-                    <Text style={{ color: colors.text }} className="text-sm font-semibold">{weatherData.humidity}%</Text>
+                    <Text style={{ color: colors.text }} className="text-sm font-semibold">{Math.round(weatherData.humidity || 0)}%</Text>
                   </View>
                   <View className="flex-row justify-between mb-3">
                     <Text style={{ color: colors.textSecondary }} className="text-sm">Pressure</Text>
-                    <Text style={{ color: colors.text }} className="text-sm font-semibold">{weatherData.pressure} hPa</Text>
+                    <Text style={{ color: colors.text }} className="text-sm font-semibold">{Math.round(weatherData.pressure || 1013)} hPa</Text>
                   </View>
                   <View className="flex-row justify-between">
                     <Text style={{ color: colors.textSecondary }} className="text-sm">UV Index</Text>
-                    <Text style={{ color: weatherData.uvIndex > 6 ? colors.error : colors.success }} className="text-sm font-semibold">{weatherData.uvIndex}</Text>
+                    <Text style={{ color: (weatherData.uvIndex || 0) > 6 ? colors.error : colors.success }} className="text-sm font-semibold">{weatherData.uvIndex || 0}</Text>
                   </View>
                 </View>
               </View>
@@ -478,7 +501,7 @@ export default function AnalysisScreen() {
               <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
                 <View className="items-center py-8">
                   <Text style={{ color: colors.text }} className="text-6xl font-bold mb-2">
-                    {calendarData.eventsToday}
+                    {calendarData.eventsToday || 0}
                   </Text>
                   <Text style={{ color: colors.textSecondary }} className="text-base">
                     Events Today
@@ -487,11 +510,11 @@ export default function AnalysisScreen() {
                 <View className="mt-4 flex-row justify-between border-t pt-4" style={{ borderColor: colors.border }}>
                   <View>
                     <Text style={{ color: colors.textSecondary }} className="text-xs">Busy Hours</Text>
-                    <Text style={{ color: colors.warning }} className="text-lg font-bold">{calendarData.busyHoursToday}h</Text>
+                    <Text style={{ color: colors.warning }} className="text-lg font-bold">{calendarData.busyHoursToday || 0}h</Text>
                   </View>
                   <View>
                     <Text style={{ color: colors.textSecondary }} className="text-xs">Free Time</Text>
-                    <Text style={{ color: colors.success }} className="text-lg font-bold">{24 - calendarData.busyHoursToday}h</Text>
+                    <Text style={{ color: colors.success }} className="text-lg font-bold">{24 - (calendarData.busyHoursToday || 0)}h</Text>
                   </View>
                 </View>
               </View>
@@ -519,35 +542,39 @@ export default function AnalysisScreen() {
             <View className="space-y-3">
               <View className="flex-row justify-between border-b border-gray-800 pb-2">
                 <Text className="text-gray-400">Steps Today</Text>
-                <Text className="text-white font-semibold">{wearableData.steps.toLocaleString()}</Text>
+                <Text className="text-white font-semibold">{(wearableData.steps || 0).toLocaleString()}</Text>
               </View>
               <View className="flex-row justify-between border-b border-gray-800 pb-2">
                 <Text className="text-gray-400">Temperature</Text>
-                <Text className="text-white font-semibold">{weatherData.weather.temperature.toFixed(1)}°C</Text>
+                <Text className="text-white font-semibold">{(weatherData.temperature || 20).toFixed(1)}°C</Text>
               </View>
               <View className="flex-row justify-between border-b border-gray-800 pb-2">
                 <Text className="text-gray-400">Humidity</Text>
-                <Text className="text-white font-semibold">{Math.round(weatherData.weather.humidity)}%</Text>
+                <Text className="text-white font-semibold">{Math.round(weatherData.humidity || 0)}%</Text>
               </View>
               <View className="flex-row justify-between border-b border-gray-800 pb-2">
                 <Text className="text-gray-400">Barometric Pressure</Text>
-                <Text className="text-white font-semibold">{Math.round(weatherData.weather.pressure)} hPa</Text>
+                <Text className="text-white font-semibold">{Math.round(weatherData.pressure || 1013)} hPa</Text>
               </View>
               <View className="flex-row justify-between border-b border-gray-800 pb-2">
                 <Text className="text-gray-400">UV Index</Text>
-                <Text className="text-white font-semibold">{weatherData.weather.uvIndex.toFixed(1)}</Text>
+                <Text className="text-white font-semibold">{(weatherData.uvIndex || 0).toFixed(1)}</Text>
               </View>
               <View className="flex-row justify-between border-b border-gray-800 pb-2">
                 <Text className="text-gray-400">Notifications</Text>
-                <Text className="text-white font-semibold">{phoneData.notificationCount}</Text>
+                <Text className="text-white font-semibold">{phoneData.notificationCount || 0}</Text>
+              </View>
+              <View className="flex-row justify-between border-b border-gray-800 pb-2">
+                <Text className="text-gray-400">Screen Time</Text>
+                <Text className="text-white font-semibold">{screenTimeHours}h</Text>
               </View>
               <View className="flex-row justify-between border-b border-gray-800 pb-2">
                 <Text className="text-gray-400">Calendar Events</Text>
-                <Text className="text-white font-semibold">{calendarData.eventsToday}</Text>
+                <Text className="text-white font-semibold">{calendarData.eventsToday || 0}</Text>
               </View>
               <View className="flex-row justify-between">
                 <Text className="text-gray-400">Activity Level</Text>
-                <Text className="text-white font-semibold capitalize">{phoneData.activityLevel}</Text>
+                <Text className="text-white font-semibold capitalize">{phoneData.activityLevel || 'light'}</Text>
               </View>
             </View>
           </View>

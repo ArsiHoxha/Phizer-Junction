@@ -65,25 +65,33 @@ class LocationWeatherCollector {
   }
 
   /**
-   * Fetch weather data from Open-Meteo API (free, no key required)
+   * Fetch weather data from OpenWeatherMap API
    */
   private async fetchWeatherData(latitude: number, longitude: number) {
     try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,surface_pressure,uv_index&temperature_unit=celsius`;
+      const OPENWEATHER_API_KEY = 'f482b7674bcdaab45f8730c925ef7eeb';
       
-      const response = await fetch(url);
-      const data = await response.json();
+      // Fetch current weather data
+      const currentWeatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${OPENWEATHER_API_KEY}&units=metric`;
       
-      if (data.current) {
+      // Fetch UV Index data
+      const uvUrl = `https://api.openweathermap.org/data/2.5/uvi?lat=${latitude}&lon=${longitude}&appid=${OPENWEATHER_API_KEY}`;
+      
+      const [weatherResponse, uvResponse] = await Promise.all([
+        fetch(currentWeatherUrl),
+        fetch(uvUrl)
+      ]);
+      
+      const weatherData = await weatherResponse.json();
+      const uvData = await uvResponse.json();
+      
+      if (weatherData.main && weatherData.weather) {
         return {
-          temperature: data.current.temperature_2m || 20,
-          humidity: data.current.relative_humidity_2m || 50,
-          pressure: data.current.surface_pressure || 1013,
-          uvIndex: data.current.uv_index || 3,
-          condition: this.getWeatherCondition(
-            data.current.temperature_2m,
-            data.current.relative_humidity_2m
-          ),
+          temperature: weatherData.main.temp || 20,
+          humidity: weatherData.main.humidity || 50,
+          pressure: weatherData.main.pressure || 1013,
+          uvIndex: uvData.value || 0,
+          condition: weatherData.weather[0]?.main || 'Clear',
         };
       }
       

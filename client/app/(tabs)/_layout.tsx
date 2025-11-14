@@ -15,15 +15,16 @@ export default function TabLayout() {
           backgroundColor: colors.surface,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: 68,
+          paddingBottom: 20,
+          paddingTop: 12,
+          height: 85,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600',
+          marginTop: 4,
         },
       }}
     >

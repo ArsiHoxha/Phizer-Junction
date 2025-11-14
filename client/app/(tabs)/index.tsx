@@ -412,7 +412,7 @@ export default function DashboardScreen() {
           entering={FadeInUp.duration(600).delay(200)}
           className="px-6 mb-6"
         >
-          <Text style={{ color: colors.text }} className="text-lg font-semibold mb-3">
+          <Text style={{ color: colors.text }} className="text-lg font-bold mb-3">
             Today's Metrics
           </Text>
           
@@ -442,9 +442,17 @@ export default function DashboardScreen() {
 
               return (
                 <View key={index} className="flex-1 mx-1">
-                  <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-xl p-2.5 border items-center">
+                  <View style={{ 
+                    backgroundColor: colors.card, 
+                    borderColor: colors.border,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: isDark ? 0.3 : 0.1,
+                    shadowRadius: 4,
+                    elevation: 3,
+                  }} className="rounded-2xl p-3 border items-center">
                     <CircularProgress
-                      size={48}
+                      size={50}
                       width={5}
                       fill={Math.min(100, Math.max(0, percentage))}
                       tintColor={progressColor}
@@ -458,17 +466,17 @@ export default function DashboardScreen() {
                       )}
                     </CircularProgress>
                     
-                    <Text style={{ color: colors.textSecondary }} className="text-[10px] mt-1.5 font-medium">{metric.label}</Text>
+                    <Text style={{ color: colors.text }} className="text-[11px] mt-2 font-semibold">{metric.label}</Text>
                     
                     <View className="flex-row items-center mt-1">
                       <Ionicons 
                         name={metric.trend === 'down' ? 'arrow-down' : 'arrow-up'} 
                         size={10} 
-                        color={metric.trend === 'down' ? '#EF4444' : '#F59E0B'}
+                        color={metric.trend === 'down' ? colors.error : colors.success}
                       />
                       <Text 
-                        style={{ color: metric.trend === 'down' ? '#EF4444' : '#F59E0B' }} 
-                        className="text-[9px] ml-0.5 font-medium"
+                        style={{ color: metric.trend === 'down' ? colors.error : colors.success }} 
+                        className="text-[9px] ml-0.5 font-semibold"
                       >
                         {metric.change}
                       </Text>
@@ -509,14 +517,25 @@ export default function DashboardScreen() {
           entering={FadeInDown.duration(800).delay(400)}
           className="mx-6 mb-6"
         >
-          <View className="bg-gradient-to-br from-gray-900 to-black rounded-3xl p-6 border border-gray-800">
-            <View className="flex-row items-center mb-3">
-              <View className="w-10 h-10 rounded-full bg-white items-center justify-center mr-3">
-                <Text className="text-xl">💡</Text>
+          <View style={{ 
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            shadowColor: colors.primary,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            elevation: 5,
+          }} className="rounded-3xl p-6 border-2">
+            <View className="flex-row items-center mb-4">
+              <View style={{ backgroundColor: colors.primary }} className="w-12 h-12 rounded-2xl items-center justify-center mr-3">
+                <Ionicons name="sparkles" size={24} color="#fff" />
               </View>
-              <Text className="text-white text-lg font-semibold">AI Insight</Text>
+              <View className="flex-1">
+                <Text style={{ color: colors.text }} className="text-xl font-bold">AI Insights</Text>
+                <Text style={{ color: colors.textSecondary }} className="text-xs">Powered by Gemini</Text>
+              </View>
             </View>
-            <Text className="text-gray-300 text-base leading-6 mb-4">
+            <Text style={{ color: colors.text }} className="text-sm leading-6 mb-5">
               {wearableData.hrv < 45 ? 
                 `Your HRV is at ${Math.round(wearableData.hrv)}ms (low). Consider reducing stress and getting quality sleep tonight.` :
                 wearableData.stress > 70 ?
@@ -530,11 +549,19 @@ export default function DashboardScreen() {
             </Text>
             <TouchableOpacity 
               onPress={fetchAIAnalysis}
-              className="bg-white rounded-full py-3 px-6 self-start flex-row items-center"
+              style={{ 
+                backgroundColor: colors.primary,
+                shadowColor: colors.primary,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 6,
+                elevation: 4,
+              }}
+              className="rounded-2xl py-3.5 px-6 flex-row items-center justify-center"
               activeOpacity={0.8}
             >
-              <Ionicons name="sparkles" size={18} color="#000" style={{ marginRight: 8 }} />
-              <Text className="text-black font-semibold">Get AI Recommendations</Text>
+              <Ionicons name="sparkles" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text className="text-white font-bold text-base">Get Full Analysis</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
