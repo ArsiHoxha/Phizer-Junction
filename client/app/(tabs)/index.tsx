@@ -3,12 +3,14 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, Dimensions, SafeAr
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import { useDataCollection } from '../../contexts/DataCollectionContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
 export default function DashboardScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState('today');
   const { latestData, currentRisk, isCollecting } = useDataCollection();
+  const { isDark, colors } = useTheme();
   
   // Historical data for charts (last 7 data points)
   const [historicalData, setHistoricalData] = useState<any[]>([]);
@@ -182,16 +184,16 @@ export default function DashboardScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="px-6 pt-16 pb-6">
-          <Text className="text-3xl font-bold text-black mb-2">
+          <Text style={{ color: colors.text }} className="text-3xl font-bold mb-2">
             Migraine Guardian
           </Text>
-          <Text className="text-base text-gray-600">
+          <Text style={{ color: colors.textSecondary }} className="text-base">
             Thursday, November 14
           </Text>
         </View>
@@ -288,17 +290,17 @@ export default function DashboardScreen() {
           entering={FadeInUp.duration(600).delay(200)}
           className="px-6 mb-6"
         >
-          <Text className="text-xl font-semibold text-black mb-4">
+          <Text style={{ color: colors.text }} className="text-xl font-semibold mb-4">
             Today's Metrics
           </Text>
           <View className="flex-row flex-wrap -mx-2">
             {metrics.map((metric, index) => (
               <View key={index} className="w-1/2 px-2 mb-3">
-                <View className="bg-gray-50 rounded-2xl p-4 border border-gray-200">
-                  <Text className="text-gray-500 text-xs mb-2">{metric.label}</Text>
+                <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl p-4 border">
+                  <Text style={{ color: colors.textSecondary }} className="text-xs mb-2">{metric.label}</Text>
                   <View className="flex-row items-end mb-1">
-                    <Text className="text-black text-2xl font-bold">{metric.value}</Text>
-                    <Text className="text-gray-600 text-sm mb-1 ml-1">{metric.unit}</Text>
+                    <Text style={{ color: colors.text }} className="text-2xl font-bold">{metric.value}</Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-sm mb-1 ml-1">{metric.unit}</Text>
                   </View>
                   <View className="flex-row items-center">
                     <Text className={`text-xs ${
@@ -318,19 +320,19 @@ export default function DashboardScreen() {
           entering={FadeInUp.duration(600).delay(300)}
           className="px-6 mb-6"
         >
-          <Text className="text-xl font-semibold text-black mb-4">
+          <Text style={{ color: colors.text }} className="text-xl font-semibold mb-4">
             Top Contributing Triggers
           </Text>
           {triggers.map((trigger, index) => (
             <View key={index} className="mb-3">
               <View className="flex-row items-center justify-between mb-2">
-                <Text className="text-base font-medium text-black">{trigger.name}</Text>
-                <Text className="text-sm font-semibold text-gray-900">{trigger.impact}%</Text>
+                <Text style={{ color: colors.text }} className="text-base font-medium">{trigger.name}</Text>
+                <Text style={{ color: colors.text }} className="text-sm font-semibold">{trigger.impact}%</Text>
               </View>
-              <View className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <View style={{ backgroundColor: isDark ? '#2a2a2a' : '#e5e5e5' }} className="h-2 rounded-full overflow-hidden">
                 <View 
-                  className="h-full bg-black rounded-full"
-                  style={{ width: `${trigger.impact}%` }}
+                  style={{ backgroundColor: colors.primary, width: `${trigger.impact}%` }}
+                  className="h-full rounded-full"
                 />
               </View>
             </View>
@@ -375,8 +377,8 @@ export default function DashboardScreen() {
           entering={FadeInUp.duration(600).delay(500)}
           className="px-6 mb-8"
         >
-          <Text className="text-xl font-semibold text-black mb-4">
-            Detailed Trends
+          <Text style={{ color: colors.text }} className="text-xl font-semibold mb-4">
+            Detailed Analysis
           </Text>
           
           {/* Period Selector */}
@@ -401,8 +403,8 @@ export default function DashboardScreen() {
           {/* Chart Placeholders */}
           {historicalData.length >= 2 ? (
             <>
-              <View className="bg-white rounded-2xl border border-gray-200 p-4 mb-3">
-                <Text className="text-sm font-semibold text-gray-900 mb-3">
+              <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4 mb-3">
+                <Text style={{ color: colors.text }} className="text-sm font-semibold mb-3">
                   Heart Rate Variability (HRV)
                 </Text>
                 <LineChart
@@ -410,19 +412,19 @@ export default function DashboardScreen() {
                   width={width - 80}
                   height={150}
                   chartConfig={{
-                    backgroundColor: '#fff',
-                    backgroundGradientFrom: '#fff',
-                    backgroundGradientTo: '#fff',
+                    backgroundColor: colors.card,
+                    backgroundGradientFrom: colors.card,
+                    backgroundGradientTo: colors.card,
                     decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
+                    color: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`,
+                    labelColor: (opacity = 1) => isDark ? `rgba(156, 163, 175, ${opacity})` : `rgba(107, 114, 128, ${opacity})`,
                     style: {
                       borderRadius: 16
                     },
                     propsForDots: {
                       r: "3",
                       strokeWidth: "2",
-                      stroke: "#000"
+                      stroke: colors.text
                     }
                   }}
                   bezier
@@ -431,13 +433,13 @@ export default function DashboardScreen() {
                     borderRadius: 16
                   }}
                 />
-                <Text className="text-xs text-gray-500 mt-2 text-center">
+                <Text style={{ color: colors.textSecondary }} className="text-xs mt-2 text-center">
                   Current: {Math.round(wearableData.hrv)}ms | Target: 60-80ms
                 </Text>
               </View>
 
-              <View className="bg-white rounded-2xl border border-gray-200 p-4 mb-3">
-                <Text className="text-sm font-semibold text-gray-900 mb-3">
+              <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4 mb-3">
+                <Text style={{ color: colors.text }} className="text-sm font-semibold mb-3">
                   Stress Levels
                 </Text>
                 <LineChart
@@ -445,9 +447,9 @@ export default function DashboardScreen() {
                   width={width - 80}
                   height={150}
                   chartConfig={{
-                    backgroundColor: '#fff',
-                    backgroundGradientFrom: '#fff',
-                    backgroundGradientTo: '#fff',
+                    backgroundColor: colors.card,
+                    backgroundGradientFrom: colors.card,
+                    backgroundGradientTo: colors.card,
                     decimalPlaces: 0,
                     color: (opacity = 1) => {
                       const stress = wearableData.stress;
@@ -455,7 +457,7 @@ export default function DashboardScreen() {
                       if (stress > 40) return `rgba(251, 191, 36, ${opacity})`; // yellow
                       return `rgba(34, 197, 94, ${opacity})`; // green
                     },
-                    labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
+                    labelColor: (opacity = 1) => isDark ? `rgba(156, 163, 175, ${opacity})` : `rgba(107, 114, 128, ${opacity})`,
                     style: {
                       borderRadius: 16
                     },
@@ -471,13 +473,13 @@ export default function DashboardScreen() {
                     borderRadius: 16
                   }}
                 />
-                <Text className="text-xs text-gray-500 mt-2 text-center">
+                <Text style={{ color: colors.textSecondary }} className="text-xs mt-2 text-center">
                   Current: {Math.round(wearableData.stress)}% | Target: Below 40%
                 </Text>
               </View>
 
-              <View className="bg-white rounded-2xl border border-gray-200 p-4 mb-3">
-                <Text className="text-sm font-semibold text-gray-900 mb-3">
+              <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4 mb-3">
+                <Text style={{ color: colors.text }} className="text-sm font-semibold mb-3">
                   Heart Rate
                 </Text>
                 <LineChart
@@ -485,12 +487,12 @@ export default function DashboardScreen() {
                   width={width - 80}
                   height={150}
                   chartConfig={{
-                    backgroundColor: '#fff',
-                    backgroundGradientFrom: '#fff',
-                    backgroundGradientTo: '#fff',
+                    backgroundColor: colors.card,
+                    backgroundGradientFrom: colors.card,
+                    backgroundGradientTo: colors.card,
                     decimalPlaces: 0,
                     color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
+                    labelColor: (opacity = 1) => isDark ? `rgba(156, 163, 175, ${opacity})` : `rgba(107, 114, 128, ${opacity})`,
                     style: {
                       borderRadius: 16
                     },
@@ -506,29 +508,29 @@ export default function DashboardScreen() {
                     borderRadius: 16
                   }}
                 />
-                <Text className="text-xs text-gray-500 mt-2 text-center">
+                <Text style={{ color: colors.textSecondary }} className="text-xs mt-2 text-center">
                   Current: {Math.round(wearableData.heartRate)} bpm | Target: 60-80 bpm
                 </Text>
               </View>
             </>
           ) : (
-            <View className="bg-white rounded-2xl border border-gray-200 p-8">
-              <Text className="text-gray-500 text-center mb-2">
+            <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-8">
+              <Text style={{ color: colors.textSecondary }} className="text-center mb-2">
                 Building your health profile...
               </Text>
-              <Text className="text-gray-400 text-sm text-center">
-                Charts will appear once we've collected enough data points
+              <Text style={{ color: colors.textSecondary }} className="text-sm text-center">
+                Charts will appear after collecting initial data
               </Text>
-              <View className="mt-4 flex-row justify-center">
-                <View className="w-2 h-2 rounded-full bg-gray-400 mx-1 animate-pulse" />
-                <View className="w-2 h-2 rounded-full bg-gray-400 mx-1 animate-pulse" style={{ animationDelay: '0.2s' }} />
-                <View className="w-2 h-2 rounded-full bg-gray-400 mx-1 animate-pulse" style={{ animationDelay: '0.4s' }} />
-              </View>
             </View>
           )}
+        </Animated.View>
 
-          {/* Additional Real-time Data */}
-          <View className="bg-black rounded-2xl p-6 mt-4">
+        {/* Live Data Stream Card - NEW */}
+        <Animated.View 
+          entering={FadeInDown.duration(800).delay(600)}
+          className="mx-6 mb-8"
+        >
+          <View className="bg-black rounded-3xl p-6 border border-gray-800">
             <Text className="text-white font-semibold text-lg mb-4">
               Live Data Stream
             </Text>

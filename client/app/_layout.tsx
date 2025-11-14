@@ -8,6 +8,7 @@ import '../global.css';
 import { CLERK_PUBLISHABLE_KEY } from '../config/config';
 import { OnboardingProvider } from '../contexts/OnboardingContext';
 import { DataCollectionProvider } from '../contexts/DataCollectionContext';
+import { ThemeProvider } from '../contexts/ThemeContext';
 
 // Token cache for Clerk
 const tokenCache = {
@@ -33,9 +34,10 @@ export default function RootLayout() {
       publishableKey={CLERK_PUBLISHABLE_KEY}
       tokenCache={tokenCache}
     >
-      <OnboardingProvider>
-        <DataCollectionProvider>
-          <ClerkLoaded>
+      <ThemeProvider>
+        <OnboardingProvider>
+          <DataCollectionProvider>
+            <ClerkLoaded>
         <Stack
           screenOptions={{
             headerShown: false,
@@ -74,6 +76,7 @@ export default function RootLayout() {
       </ClerkLoaded>
         </DataCollectionProvider>
       </OnboardingProvider>
+      </ThemeProvider>
     </ClerkProvider>
   );
 }
