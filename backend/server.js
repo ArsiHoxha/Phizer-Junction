@@ -6,14 +6,16 @@ const { clerkMiddleware, requireAuth } = require('@clerk/express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Clerk Publishable Key
+// Clerk Keys
 const CLERK_PUBLISHABLE_KEY = 'pk_test_bGVhZGluZy1veXN0ZXItMTguY2xlcmsuYWNjb3VudHMuZGV2JA';
+const CLERK_SECRET_KEY = 'sk_test_IBuDewVmhzJ8xwET2CUgyoiIEenNcM0kBs13zmM2BD';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(clerkMiddleware({ 
-  publishableKey: CLERK_PUBLISHABLE_KEY 
+  publishableKey: CLERK_PUBLISHABLE_KEY,
+  secretKey: CLERK_SECRET_KEY
 }));
 
 // MongoDB Connection
