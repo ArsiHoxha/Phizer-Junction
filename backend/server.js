@@ -2,13 +2,16 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const { clerkMiddleware, requireAuth } = require('@clerk/express');
+const { analyzeHealthData, getTriggerInsights } = require('./services/geminiService');
+const { textToSpeech } = require('./services/elevenLabsService');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Clerk Keys
-const CLERK_PUBLISHABLE_KEY = 'pk_test_bGVhZGluZy1veXN0ZXItMTguY2xlcmsuYWNjb3VudHMuZGV2JA';
-const CLERK_SECRET_KEY = 'sk_test_IBuDewVmhzJ8xwET2CUgyoiIEenNcM0kBs13zmM2BD';
+const CLERK_PUBLISHABLE_KEY = process.env.CLERK_PUBLISHABLE_KEY || 'pk_test_bGVhZGluZy1veXN0ZXItMTguY2xlcmsuYWNjb3VudHMuZGV2JA';
+const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || 'sk_test_IBuDewVmhzJ8xwET2CUgyoiIEenNcM0kBs13zmM2BD';
 
 // Middleware
 app.use(cors());
@@ -537,6 +540,58 @@ app.get('/api/risk-history/:clerkId', requireAuth(), async (req, res) => {
   } catch (error) {
     console.error('Error fetching risk history:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ==================== AI ANALYSIS ROUTES ====================
+
+// Get AI analysis of current health data
+app.post('/api/ai/analyze', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const healthData = req.body;
+
+    const analysis = await analyzeHealthData(healthData);
+
+    // Generate audio from the analysis text
+    let audioBase64 = null;
+    try {
+      const audioBuffer = await textToSpeech(analysis.analysis);
+      audioBase64 = audioBuffer.toString('base64');
+    } catch (audioError) {
+      console.error('Audio generation error:', audioError);
+      // Continue without audio if ElevenLabs fails
+    }
+
+    res.status(200).json({
+      ...analysis,
+      audio: audioBase64 // Base64 encoded audio
+    });
+  } catch (error) {
+    console.error('Error generating AI analysis:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      analysis: 'Unable to generate insights at this time.'
+    });
+  }
+});
+
+// Get AI insights for specific triggers
+app.post('/api/ai/triggers', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { triggers } = req.body;
+
+    const insights = await getTriggerInsights(triggers);
+
+    res.status(200).json(insights);
+  } catch (error) {
+    console.error('Error generating trigger insights:', error);
+    res.status(500).json({ 
+      success: false,
+      insights: 'Unable to analyze triggers at this time.'
+    });
   }
 });
 

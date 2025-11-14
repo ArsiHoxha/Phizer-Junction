@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Dimensions, SafeAreaView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Dimensions, SafeAreaView, Modal, ActivityIndicator } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LineChart, BarChart } from 'react-native-chart-kit';
+import { CircularProgress } from 'react-native-circular-progress';
 import { useDataCollection } from '../../contexts/DataCollectionContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import axios from 'axios';
+import { useAuth } from '@clerk/clerk-expo';
+import { BACKEND_URL } from '../../config/config';
+import { Audio } from 'expo-av';
 
 const { width } = Dimensions.get('window');
 
@@ -11,6 +17,14 @@ export default function DashboardScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState('today');
   const { latestData, currentRisk, isCollecting } = useDataCollection();
   const { isDark, colors } = useTheme();
+  const { getToken } = useAuth();
+  
+  // AI Recommendations Modal State
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState('');
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   
   // Historical data for charts (last 7 data points)
   const [historicalData, setHistoricalData] = useState<any[]>([]);
@@ -174,14 +188,122 @@ export default function DashboardScreen() {
       };
     }
 
-    const dataPoints = historicalData.slice(-7);
+    const dataPoints = historicalData.slice(-10); // Last 10 points
     return {
       labels: dataPoints.map((_, i) => `${i + 1}`),
       datasets: [{
-        data: dataPoints.map(d => d[metric] || 0)
+        data: dataPoints.map(d => d[metric])
       }]
     };
   };
+
+  // Fetch AI Analysis
+  const fetchAIAnalysis = async () => {
+    setLoadingAI(true);
+    setShowAIModal(true);
+
+    try {
+      const token = await getToken();
+      const response = await axios.post(
+        `${BACKEND_URL}/api/ai/analyze`,
+        {
+          wearable: latestData?.wearable,
+          phone: latestData?.phone,
+          sleep: latestData?.sleep,
+          location: latestData?.weather,
+          calendar: latestData?.calendar,
+          currentRisk,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        setAiAnalysis(response.data.analysis);
+        
+        // Play audio if available
+        if (response.data.audio) {
+          await playAudio(response.data.audio);
+        }
+      } else {
+        setAiAnalysis('Unable to generate insights. Please try again later.');
+      }
+    } catch (error) {
+      console.error('AI Analysis Error:', error);
+      setAiAnalysis('Failed to connect to AI service. Please check your connection.');
+    } finally {
+      setLoadingAI(false);
+    }
+  };
+
+  // Play audio from base64
+  const playAudio = async (audioBase64: string) => {
+    try {
+      // Unload previous sound if exists
+      if (sound) {
+        await sound.unloadAsync();
+      }
+
+      // Set audio mode for playback
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+
+      // Create sound from base64
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: `data:audio/mpeg;base64,${audioBase64}` },
+        { shouldPlay: true }
+      );
+
+      setSound(newSound);
+      setIsPlayingAudio(true);
+
+      // Handle playback status
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsPlayingAudio(false);
+        }
+      });
+    } catch (error) {
+      console.error('Audio playback error:', error);
+    }
+  };
+
+  // Toggle audio playback
+  const toggleAudio = async () => {
+    if (!sound) return;
+
+    try {
+      const status = await sound.getStatusAsync();
+      if (status.isLoaded) {
+        if (isPlayingAudio) {
+          await sound.pauseAsync();
+          setIsPlayingAudio(false);
+        } else {
+          await sound.playAsync();
+          setIsPlayingAudio(true);
+        }
+      }
+    } catch (error) {
+      console.error('Toggle audio error:', error);
+    }
+  };
+
+  // Cleanup sound on unmount
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
+
+  // Calculate risk color and status
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -290,28 +412,71 @@ export default function DashboardScreen() {
           entering={FadeInUp.duration(600).delay(200)}
           className="px-6 mb-6"
         >
-          <Text style={{ color: colors.text }} className="text-xl font-semibold mb-4">
+          <Text style={{ color: colors.text }} className="text-lg font-semibold mb-3">
             Today's Metrics
           </Text>
-          <View className="flex-row flex-wrap -mx-2">
-            {metrics.map((metric, index) => (
-              <View key={index} className="w-1/2 px-2 mb-3">
-                <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl p-4 border">
-                  <Text style={{ color: colors.textSecondary }} className="text-xs mb-2">{metric.label}</Text>
-                  <View className="flex-row items-end mb-1">
-                    <Text style={{ color: colors.text }} className="text-2xl font-bold">{metric.value}</Text>
-                    <Text style={{ color: colors.textSecondary }} className="text-sm mb-1 ml-1">{metric.unit}</Text>
-                  </View>
-                  <View className="flex-row items-center">
-                    <Text className={`text-xs ${
-                      metric.trend === 'down' ? 'text-red-600' : 'text-orange-600'
-                    }`}>
-                      {metric.trend === 'down' ? '↓' : '↑'} {metric.change}
-                    </Text>
+          
+          <View className="flex-row justify-between">
+            {metrics.map((metric, index) => {
+              // Calculate percentage for circular progress
+              let percentage = 0;
+              let maxValue = 100;
+              
+              if (metric.label === 'HRV') {
+                maxValue = 100;
+                percentage = (parseInt(metric.value) / maxValue) * 100;
+              } else if (metric.label === 'Sleep') {
+                maxValue = 9; // 9 hours max
+                percentage = (parseFloat(metric.value) / maxValue) * 100;
+              } else if (metric.label === 'Stress') {
+                percentage = 100 - parseInt(metric.value); // Inverse for stress
+              } else if (metric.label === 'Screen') {
+                maxValue = 8; // 8 hours max
+                percentage = Math.max(0, 100 - (parseFloat(metric.value) / maxValue) * 100);
+              }
+
+              // Determine color based on metric health
+              let progressColor = colors.success;
+              if (percentage < 40) progressColor = colors.error;
+              else if (percentage < 70) progressColor = colors.warning;
+
+              return (
+                <View key={index} className="flex-1 mx-1">
+                  <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-xl p-2.5 border items-center">
+                    <CircularProgress
+                      size={48}
+                      width={5}
+                      fill={Math.min(100, Math.max(0, percentage))}
+                      tintColor={progressColor}
+                      backgroundColor={isDark ? '#2a2a2a' : '#e5e5e5'}
+                      rotation={0}
+                    >
+                      {() => (
+                        <View className="items-center">
+                          <Text style={{ color: colors.text }} className="text-sm font-bold">{metric.value}</Text>
+                        </View>
+                      )}
+                    </CircularProgress>
+                    
+                    <Text style={{ color: colors.textSecondary }} className="text-[10px] mt-1.5 font-medium">{metric.label}</Text>
+                    
+                    <View className="flex-row items-center mt-1">
+                      <Ionicons 
+                        name={metric.trend === 'down' ? 'arrow-down' : 'arrow-up'} 
+                        size={10} 
+                        color={metric.trend === 'down' ? '#EF4444' : '#F59E0B'}
+                      />
+                      <Text 
+                        style={{ color: metric.trend === 'down' ? '#EF4444' : '#F59E0B' }} 
+                        className="text-[9px] ml-0.5 font-medium"
+                      >
+                        {metric.change}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </Animated.View>
 
@@ -364,216 +529,97 @@ export default function DashboardScreen() {
               }
             </Text>
             <TouchableOpacity 
-              className="bg-white rounded-full py-3 px-6 self-start"
+              onPress={fetchAIAnalysis}
+              className="bg-white rounded-full py-3 px-6 self-start flex-row items-center"
               activeOpacity={0.8}
             >
-              <Text className="text-black font-semibold">View Recommendations</Text>
+              <Ionicons name="sparkles" size={18} color="#000" style={{ marginRight: 8 }} />
+              <Text className="text-black font-semibold">Get AI Recommendations</Text>
             </TouchableOpacity>
-          </View>
-        </Animated.View>
-
-        {/* Detailed Charts Section */}
-        <Animated.View 
-          entering={FadeInUp.duration(600).delay(500)}
-          className="px-6 mb-8"
-        >
-          <Text style={{ color: colors.text }} className="text-xl font-semibold mb-4">
-            Detailed Analysis
-          </Text>
-          
-          {/* Period Selector */}
-          <View className="flex-row mb-4 bg-gray-100 rounded-full p-1">
-            {['today', 'week', 'month'].map((period) => (
-              <TouchableOpacity
-                key={period}
-                onPress={() => setSelectedPeriod(period)}
-                className={`flex-1 py-2 rounded-full ${
-                  selectedPeriod === period ? 'bg-black' : 'bg-transparent'
-                }`}
-              >
-                <Text className={`text-center font-medium capitalize ${
-                  selectedPeriod === period ? 'text-white' : 'text-gray-600'
-                }`}>
-                  {period}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Chart Placeholders */}
-          {historicalData.length >= 2 ? (
-            <>
-              <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4 mb-3">
-                <Text style={{ color: colors.text }} className="text-sm font-semibold mb-3">
-                  Heart Rate Variability (HRV)
-                </Text>
-                <LineChart
-                  data={getMetricChartData('hrv')}
-                  width={width - 80}
-                  height={150}
-                  chartConfig={{
-                    backgroundColor: colors.card,
-                    backgroundGradientFrom: colors.card,
-                    backgroundGradientTo: colors.card,
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`,
-                    labelColor: (opacity = 1) => isDark ? `rgba(156, 163, 175, ${opacity})` : `rgba(107, 114, 128, ${opacity})`,
-                    style: {
-                      borderRadius: 16
-                    },
-                    propsForDots: {
-                      r: "3",
-                      strokeWidth: "2",
-                      stroke: colors.text
-                    }
-                  }}
-                  bezier
-                  style={{
-                    marginLeft: -10,
-                    borderRadius: 16
-                  }}
-                />
-                <Text style={{ color: colors.textSecondary }} className="text-xs mt-2 text-center">
-                  Current: {Math.round(wearableData.hrv)}ms | Target: 60-80ms
-                </Text>
-              </View>
-
-              <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4 mb-3">
-                <Text style={{ color: colors.text }} className="text-sm font-semibold mb-3">
-                  Stress Levels
-                </Text>
-                <LineChart
-                  data={getMetricChartData('stress')}
-                  width={width - 80}
-                  height={150}
-                  chartConfig={{
-                    backgroundColor: colors.card,
-                    backgroundGradientFrom: colors.card,
-                    backgroundGradientTo: colors.card,
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => {
-                      const stress = wearableData.stress;
-                      if (stress > 70) return `rgba(239, 68, 68, ${opacity})`; // red
-                      if (stress > 40) return `rgba(251, 191, 36, ${opacity})`; // yellow
-                      return `rgba(34, 197, 94, ${opacity})`; // green
-                    },
-                    labelColor: (opacity = 1) => isDark ? `rgba(156, 163, 175, ${opacity})` : `rgba(107, 114, 128, ${opacity})`,
-                    style: {
-                      borderRadius: 16
-                    },
-                    propsForDots: {
-                      r: "3",
-                      strokeWidth: "2",
-                      stroke: wearableData.stress > 70 ? "#EF4444" : wearableData.stress > 40 ? "#FBBF24" : "#22C55E"
-                    }
-                  }}
-                  bezier
-                  style={{
-                    marginLeft: -10,
-                    borderRadius: 16
-                  }}
-                />
-                <Text style={{ color: colors.textSecondary }} className="text-xs mt-2 text-center">
-                  Current: {Math.round(wearableData.stress)}% | Target: Below 40%
-                </Text>
-              </View>
-
-              <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4 mb-3">
-                <Text style={{ color: colors.text }} className="text-sm font-semibold mb-3">
-                  Heart Rate
-                </Text>
-                <LineChart
-                  data={getMetricChartData('heartRate')}
-                  width={width - 80}
-                  height={150}
-                  chartConfig={{
-                    backgroundColor: colors.card,
-                    backgroundGradientFrom: colors.card,
-                    backgroundGradientTo: colors.card,
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-                    labelColor: (opacity = 1) => isDark ? `rgba(156, 163, 175, ${opacity})` : `rgba(107, 114, 128, ${opacity})`,
-                    style: {
-                      borderRadius: 16
-                    },
-                    propsForDots: {
-                      r: "3",
-                      strokeWidth: "2",
-                      stroke: "#3B82F6"
-                    }
-                  }}
-                  bezier
-                  style={{
-                    marginLeft: -10,
-                    borderRadius: 16
-                  }}
-                />
-                <Text style={{ color: colors.textSecondary }} className="text-xs mt-2 text-center">
-                  Current: {Math.round(wearableData.heartRate)} bpm | Target: 60-80 bpm
-                </Text>
-              </View>
-            </>
-          ) : (
-            <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-8">
-              <Text style={{ color: colors.textSecondary }} className="text-center mb-2">
-                Building your health profile...
-              </Text>
-              <Text style={{ color: colors.textSecondary }} className="text-sm text-center">
-                Charts will appear after collecting initial data
-              </Text>
-            </View>
-          )}
-        </Animated.View>
-
-        {/* Live Data Stream Card - NEW */}
-        <Animated.View 
-          entering={FadeInDown.duration(800).delay(600)}
-          className="mx-6 mb-8"
-        >
-          <View className="bg-black rounded-3xl p-6 border border-gray-800">
-            <Text className="text-white font-semibold text-lg mb-4">
-              Live Data Stream
-            </Text>
-            <View className="space-y-3">
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
-                <Text className="text-gray-400">Steps Today</Text>
-                <Text className="text-white font-semibold">{wearableData.steps.toLocaleString()}</Text>
-              </View>
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
-                <Text className="text-gray-400">Temperature</Text>
-                <Text className="text-white font-semibold">{weatherData.weather.temperature.toFixed(1)}°C</Text>
-              </View>
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
-                <Text className="text-gray-400">Humidity</Text>
-                <Text className="text-white font-semibold">{Math.round(weatherData.weather.humidity)}%</Text>
-              </View>
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
-                <Text className="text-gray-400">Barometric Pressure</Text>
-                <Text className="text-white font-semibold">{Math.round(weatherData.weather.pressure)} hPa</Text>
-              </View>
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
-                <Text className="text-gray-400">UV Index</Text>
-                <Text className="text-white font-semibold">{weatherData.weather.uvIndex.toFixed(1)}</Text>
-              </View>
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
-                <Text className="text-gray-400">Notifications</Text>
-                <Text className="text-white font-semibold">{phoneData.notificationCount}</Text>
-              </View>
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
-                <Text className="text-gray-400">Calendar Events</Text>
-                <Text className="text-white font-semibold">{calendarData.eventsToday}</Text>
-              </View>
-              <View className="flex-row justify-between">
-                <Text className="text-gray-400">Activity Level</Text>
-                <Text className="text-white font-semibold capitalize">{phoneData.activityLevel}</Text>
-              </View>
-            </View>
           </View>
         </Animated.View>
 
         {/* Bottom Padding */}
         <View className="h-8" />
       </ScrollView>
+
+      {/* AI Recommendations Modal */}
+      <Modal
+        visible={showAIModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAIModal(false)}
+      >
+        <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: colors.background }} className="rounded-t-3xl p-6 max-h-4/5">
+            <View className="flex-row items-center justify-between mb-4">
+              <View className="flex-row items-center">
+                <Ionicons name="sparkles" size={24} color={colors.primary} />
+                <Text style={{ color: colors.text }} className="text-xl font-bold ml-2">
+                  AI Health Analysis
+                </Text>
+              </View>
+              <View className="flex-row items-center">
+                {sound && (
+                  <TouchableOpacity onPress={toggleAudio} className="mr-3">
+                    <Ionicons 
+                      name={isPlayingAudio ? 'pause-circle' : 'play-circle'} 
+                      size={32} 
+                      color={colors.primary} 
+                    />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => {
+                  setShowAIModal(false);
+                  if (sound) {
+                    sound.stopAsync();
+                    setIsPlayingAudio(false);
+                  }
+                }}>
+                  <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} className="mb-4">
+              {loadingAI ? (
+                <View className="py-12 items-center">
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={{ color: colors.textSecondary }} className="mt-4 text-center">
+                    Analyzing your health data with Gemini AI...
+                  </Text>
+                  <Text style={{ color: colors.textSecondary }} className="mt-2 text-center text-sm">
+                    🎤 Generating voice narration...
+                  </Text>
+                </View>
+              ) : (
+                <View>
+                  {isPlayingAudio && (
+                    <View style={{ backgroundColor: isDark ? '#1a1a1a' : '#f0f9ff' }} className="rounded-xl p-3 mb-4 flex-row items-center">
+                      <Ionicons name="volume-high" size={20} color={colors.primary} />
+                      <Text style={{ color: colors.primary }} className="ml-2 text-sm font-medium">
+                        Playing audio narration...
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={{ color: colors.text }} className="text-base leading-7">
+                    {aiAnalysis}
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              onPress={() => setShowAIModal(false)}
+              style={{ backgroundColor: colors.primary }}
+              className="rounded-full py-4"
+              activeOpacity={0.8}
+            >
+              <Text className="text-white text-center font-semibold">Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
