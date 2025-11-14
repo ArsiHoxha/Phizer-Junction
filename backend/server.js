@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(clerkMiddleware());
 
 // MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/migraine-guardian';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arsihoxha23:Arsi159753@cluster0.60zdjwh.mongodb.net/chefapp_ios';
 
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ Connected to MongoDB'))
