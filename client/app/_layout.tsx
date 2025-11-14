@@ -6,6 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 import 'react-native-reanimated';
 import '../global.css';
 import { CLERK_PUBLISHABLE_KEY } from '../config/config';
+import { OnboardingProvider } from '../contexts/OnboardingContext';
 
 // Token cache for Clerk
 const tokenCache = {
@@ -31,7 +32,8 @@ export default function RootLayout() {
       publishableKey={CLERK_PUBLISHABLE_KEY}
       tokenCache={tokenCache}
     >
-      <ClerkLoaded>
+      <OnboardingProvider>
+        <ClerkLoaded>
         <Stack
           screenOptions={{
             headerShown: false,
@@ -61,6 +63,7 @@ export default function RootLayout() {
         </Stack>
         <StatusBar style="dark" />
       </ClerkLoaded>
+      </OnboardingProvider>
     </ClerkProvider>
   );
 }

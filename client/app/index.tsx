@@ -1,24 +1,14 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { isSignedIn, isLoaded } = useAuth();
-
-  useEffect(() => {
-    // If user is already signed in, skip to onboarding or dashboard
-    if (isLoaded && isSignedIn) {
-      // You can add logic here to check if onboarding is complete
-      // For now, we'll go to permissions
-      router.replace('/onboarding/permissions');
-    }
-  }, [isLoaded, isSignedIn]);
 
   const handleGetStarted = () => {
-    router.push('/auth/sign-up');
+    // Go directly to onboarding
+    router.push('/onboarding/permissions');
   };
 
   return (
@@ -70,14 +60,6 @@ export default function WelcomeScreen() {
             Get Started
           </Text>
         </TouchableOpacity>
-
-        {/* Sign In Link */}
-        <View className="flex-row justify-center mb-4">
-          <Text className="text-gray-600">Already have an account? </Text>
-          <TouchableOpacity onPress={() => router.push('/auth/sign-in')}>
-            <Text className="text-black font-semibold">Sign In</Text>
-          </TouchableOpacity>
-        </View>
 
         {/* Privacy Note */}
         <Text className="text-xs text-gray-400 text-center px-4">

@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
-import { onboardingAPI, setAuthToken } from '../../services/api';
+import { useOnboarding } from '../../contexts/OnboardingContext';
 
 interface Trigger {
   id: string;
@@ -14,9 +13,8 @@ interface Trigger {
 
 export default function TriggerPersonalizationScreen() {
   const router = useRouter();
-  const { getToken } = useAuth();
+  const { setTriggers: saveTriggers } = useOnboarding();
   const [frequency, setFrequency] = useState<string>('');
-  const [saving, setSaving] = useState(false);
   const [triggers, setTriggers] = useState<Trigger[]>([
     { id: 'stress', name: 'Stress', icon: '😰', selected: false },
     { id: 'screen', name: 'Screen Time', icon: '📱', selected: false },
@@ -160,52 +158,36 @@ export default function TriggerPersonalizationScreen() {
       {/* Bottom Navigation */}
       <View className="px-8 pb-8 bg-white border-t border-gray-100">
         <TouchableOpacity
-          onPress={async () => {
+          onPress={() => {
             if (!canContinue) return;
             
-            setSaving(true);
-            try {
-              const token = await getToken();
-              setAuthToken(token);
-              
-              const selectedTriggers = triggers
-                .filter(t => t.selected)
-                .map(t => t.id);
-              
-              await onboardingAPI.saveTriggers({
-                frequency,
-                triggers: selectedTriggers,
-              });
-              
-              router.push('/onboarding/dashboard-intro');
-            } catch (error: any) {
-              console.error('Error saving triggers:', error);
-              Alert.alert('Error', 'Failed to save triggers. Please try again.');
-            } finally {
-              setSaving(false);
-            }
+            const selectedTriggers = triggers
+              .filter(t => t.selected)
+              .map(t => t.id);
+            
+            saveTriggers({
+              frequency,
+              triggers: selectedTriggers,
+            });
+            
+            router.push('/onboarding/dashboard-intro');
           }}
-          disabled={!canContinue || saving}
+          disabled={!canContinue}
           className={`rounded-full py-5 mb-3 ${
-            canContinue && !saving ? 'bg-black' : 'bg-gray-200'
+            canContinue ? 'bg-black' : 'bg-gray-200'
           }`}
           activeOpacity={0.8}
         >
-          {saving ? (
-            <ActivityIndicator color={canContinue ? '#fff' : '#9CA3AF'} />
-          ) : (
-            <Text className={`text-center text-lg font-semibold ${
-              canContinue ? 'text-white' : 'text-gray-400'
-            }`}>
-              Continue
-            </Text>
-          )}
+          <Text className={`text-center text-lg font-semibold ${
+            canContinue ? 'text-white' : 'text-gray-400'
+          }`}>
+            Continue
+          </Text>
         </TouchableOpacity>
         
         <TouchableOpacity
           onPress={() => router.back()}
           className="py-3"
-          disabled={saving}
         >
           <Text className="text-gray-500 text-center">Back</Text>
         </TouchableOpacity>

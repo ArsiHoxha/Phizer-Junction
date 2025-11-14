@@ -1,14 +1,70 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
+import { useAuth, useUser, useSignIn, useOAuth } from '@clerk/clerk-expo';
 import Animated, { FadeInDown, FadeInUp, FadeIn } from 'react-native-reanimated';
-import { onboardingAPI, setAuthToken } from '../../services/api';
+import { useOnboarding } from '../../contexts/OnboardingContext';
+import { onboardingAPI, setAuthToken, userAPI } from '../../services/api';
+import * as WebBrowser from 'expo-web-browser';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function DashboardIntroScreen() {
   const router = useRouter();
+  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
   const { getToken } = useAuth();
+  const { user } = useUser();
+  const { onboardingData, clearOnboardingData } = useOnboarding();
   const [completing, setCompleting] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    setCompleting(true);
+    try {
+      const { createdSessionId, setActive } = await startOAuthFlow();
+      
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        
+        // Get auth token
+        const token = await getToken();
+        setAuthToken(token);
+
+        // Save user to database
+        if (user) {
+          await userAPI.createOrUpdate({
+            email: user.emailAddresses[0]?.emailAddress || '',
+            firstName: user.firstName || '',
+            lastName: user.lastName || '',
+          });
+        }
+
+        // Save all onboarding data
+        if (onboardingData.permissions) {
+          await onboardingAPI.savePermissions(onboardingData.permissions);
+        }
+        if (onboardingData.dataSource) {
+          await onboardingAPI.saveDataSource(onboardingData.dataSource);
+        }
+        if (onboardingData.triggers) {
+          await onboardingAPI.saveTriggers(onboardingData.triggers);
+        }
+        
+        // Mark onboarding as complete
+        await onboardingAPI.complete();
+        
+        // Clear context data
+        clearOnboardingData();
+        
+        // Navigate to dashboard
+        router.replace('/dashboard');
+      }
+    } catch (error: any) {
+      console.error('Error with Google sign-in:', error);
+      Alert.alert('Error', 'Failed to sign in with Google. Please try again.');
+    } finally {
+      setCompleting(false);
+    }
+  };
 
   const features = [
     {
@@ -156,34 +212,26 @@ export default function DashboardIntroScreen() {
       {/* Bottom Navigation */}
       <View className="px-8 pb-8 bg-white border-t border-gray-100">
         <TouchableOpacity
-          onPress={async () => {
-            setCompleting(true);
-            try {
-              const token = await getToken();
-              setAuthToken(token);
-              
-              await onboardingAPI.complete();
-              
-              router.replace('/dashboard');
-            } catch (error: any) {
-              console.error('Error completing onboarding:', error);
-              Alert.alert('Error', 'Failed to complete onboarding. Please try again.');
-            } finally {
-              setCompleting(false);
-            }
-          }}
+          onPress={handleGoogleSignIn}
           disabled={completing}
-          className="bg-black rounded-full py-5 mb-3"
+          className="bg-black rounded-full py-5 mb-3 flex-row items-center justify-center"
           activeOpacity={0.8}
         >
           {completing ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text className="text-white text-center text-lg font-semibold">
-              Go to Dashboard
-            </Text>
+            <>
+              <Text className="text-white text-center text-lg font-semibold mr-2">
+                Sign in with Google
+              </Text>
+              <Text className="text-white text-xl">🔐</Text>
+            </>
           )}
         </TouchableOpacity>
+        
+        <Text className="text-xs text-gray-500 text-center px-4 mb-3">
+          Sign in to save your data securely and sync across devices
+        </Text>
         
         <TouchableOpacity
           onPress={() => router.back()}

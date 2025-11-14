@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth, useUser } from '@clerk/clerk-expo';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
-import { onboardingAPI, setAuthToken, userAPI } from '../../services/api';
+import { useOnboarding } from '../../contexts/OnboardingContext';
 
 interface Permission {
   id: string;
@@ -15,9 +14,7 @@ interface Permission {
 
 export default function PermissionsScreen() {
   const router = useRouter();
-  const { getToken } = useAuth();
-  const { user } = useUser();
-  const [saving, setSaving] = useState(false);
+  const { setPermissions: savePermissions } = useOnboarding();
   const [permissions, setPermissions] = useState<Permission[]>([
     {
       id: 'notifications',
@@ -57,39 +54,17 @@ export default function PermissionsScreen() {
 
   const allEnabled = permissions.every(p => p.enabled);
 
-  const handleContinue = async () => {
-    setSaving(true);
-    try {
-      // Get Clerk auth token
-      const token = await getToken();
-      setAuthToken(token);
+  const handleContinue = () => {
+    // Save permissions to context
+    const permissionsData = {
+      notifications: permissions.find(p => p.id === 'notifications')?.enabled || false,
+      passiveData: permissions.find(p => p.id === 'passive')?.enabled || false,
+      calendar: permissions.find(p => p.id === 'calendar')?.enabled || false,
+      location: permissions.find(p => p.id === 'location')?.enabled || false,
+    };
 
-      // Create or update user first
-      if (user) {
-        await userAPI.createOrUpdate({
-          email: user.emailAddresses[0]?.emailAddress || '',
-          firstName: user.firstName || '',
-          lastName: user.lastName || '',
-        });
-      }
-
-      // Save permissions
-      const permissionsData = {
-        notifications: permissions.find(p => p.id === 'notifications')?.enabled || false,
-        passiveData: permissions.find(p => p.id === 'passive')?.enabled || false,
-        calendar: permissions.find(p => p.id === 'calendar')?.enabled || false,
-        location: permissions.find(p => p.id === 'location')?.enabled || false,
-      };
-
-      await onboardingAPI.savePermissions(permissionsData);
-      
-      router.push('/onboarding/data-sources');
-    } catch (error: any) {
-      console.error('Error saving permissions:', error);
-      Alert.alert('Error', 'Failed to save permissions. Please try again.');
-    } finally {
-      setSaving(false);
-    }
+    savePermissions(permissionsData);
+    router.push('/onboarding/data-sources');
   };
 
   return (
@@ -171,27 +146,22 @@ export default function PermissionsScreen() {
       <View className="px-8 pb-8 bg-white border-t border-gray-100">
         <TouchableOpacity
           onPress={handleContinue}
-          disabled={!allEnabled || saving}
+          disabled={!allEnabled}
           className={`rounded-full py-5 mb-3 ${
-            allEnabled && !saving ? 'bg-black' : 'bg-gray-200'
+            allEnabled ? 'bg-black' : 'bg-gray-200'
           }`}
           activeOpacity={0.8}
         >
-          {saving ? (
-            <ActivityIndicator color={allEnabled ? '#fff' : '#9CA3AF'} />
-          ) : (
-            <Text className={`text-center text-lg font-semibold ${
-              allEnabled ? 'text-white' : 'text-gray-400'
-            }`}>
-              Continue
-            </Text>
-          )}
+          <Text className={`text-center text-lg font-semibold ${
+            allEnabled ? 'text-white' : 'text-gray-400'
+          }`}>
+            Continue
+          </Text>
         </TouchableOpacity>
         
         <TouchableOpacity
           onPress={() => router.back()}
           className="py-3"
-          disabled={saving}
         >
           <Text className="text-gray-500 text-center">Back</Text>
         </TouchableOpacity>

@@ -6,10 +6,15 @@ const { clerkMiddleware, requireAuth } = require('@clerk/express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Clerk Publishable Key
+const CLERK_PUBLISHABLE_KEY = 'pk_test_bGVhZGluZy1veXN0ZXItMTguY2xlcmsuYWNjb3VudHMuZGV2JA';
+
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(clerkMiddleware());
+app.use(clerkMiddleware({ 
+  publishableKey: CLERK_PUBLISHABLE_KEY 
+}));
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arsihoxha23:Arsi159753@cluster0.60zdjwh.mongodb.net/chefapp_ios';

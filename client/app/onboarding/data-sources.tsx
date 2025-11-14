@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { onboardingAPI, setAuthToken } from '../../services/api';
+import { useOnboarding } from '../../contexts/OnboardingContext';
 
 export default function DataSourcesScreen() {
   const router = useRouter();
-  const { getToken } = useAuth();
+  const { setDataSource: saveDataSource } = useOnboarding();
   const [selectedMode, setSelectedMode] = useState<'phone' | 'wearable' | null>(null);
   const [wearableType, setWearableType] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const wearables = [
     { id: 'apple', name: 'Apple Watch', icon: '⌚' },
@@ -153,48 +151,32 @@ export default function DataSourcesScreen() {
       {/* Bottom Navigation */}
       <View className="px-8 pb-8 bg-white border-t border-gray-100">
         <TouchableOpacity
-          onPress={async () => {
+          onPress={() => {
             if (!selectedMode) return;
             
-            setSaving(true);
-            try {
-              const token = await getToken();
-              setAuthToken(token);
-              
-              await onboardingAPI.saveDataSource({
-                mode: selectedMode,
-                wearableType: selectedMode === 'wearable' ? wearableType || undefined : undefined,
-              });
-              
-              router.push('/onboarding/trigger-personalization');
-            } catch (error: any) {
-              console.error('Error saving data source:', error);
-              Alert.alert('Error', 'Failed to save data source. Please try again.');
-            } finally {
-              setSaving(false);
-            }
+            saveDataSource({
+              mode: selectedMode,
+              wearableType: selectedMode === 'wearable' ? wearableType || undefined : undefined,
+            });
+            
+            router.push('/onboarding/trigger-personalization');
           }}
-          disabled={!selectedMode || saving}
+          disabled={!selectedMode}
           className={`rounded-full py-5 mb-3 ${
-            selectedMode && !saving ? 'bg-black' : 'bg-gray-200'
+            selectedMode ? 'bg-black' : 'bg-gray-200'
           }`}
           activeOpacity={0.8}
         >
-          {saving ? (
-            <ActivityIndicator color={selectedMode ? '#fff' : '#9CA3AF'} />
-          ) : (
-            <Text className={`text-center text-lg font-semibold ${
-              selectedMode ? 'text-white' : 'text-gray-400'
-            }`}>
-              Continue
-            </Text>
-          )}
+          <Text className={`text-center text-lg font-semibold ${
+            selectedMode ? 'text-white' : 'text-gray-400'
+          }`}>
+            Continue
+          </Text>
         </TouchableOpacity>
         
         <TouchableOpacity
           onPress={() => router.back()}
           className="py-3"
-          disabled={saving}
         >
           <Text className="text-gray-500 text-center">Back</Text>
         </TouchableOpacity>
