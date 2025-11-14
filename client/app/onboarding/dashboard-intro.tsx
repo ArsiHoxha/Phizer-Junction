@@ -12,55 +12,74 @@ WebBrowser.maybeCompleteAuthSession();
 export default function DashboardIntroScreen() {
   const router = useRouter();
   const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const { user } = useUser();
   const { onboardingData, clearOnboardingData } = useOnboarding();
   const [completing, setCompleting] = useState(false);
 
-  const handleGoogleSignIn = async () => {
+  const saveOnboardingData = async () => {
+    try {
+      // Get auth token
+      const token = await getToken();
+      setAuthToken(token);
+
+      // Save user to database
+      if (user) {
+        await userAPI.createOrUpdate({
+          email: user.emailAddresses[0]?.emailAddress || '',
+          firstName: user.firstName || '',
+          lastName: user.lastName || '',
+        });
+      }
+
+      // Save all onboarding data
+      if (onboardingData.permissions) {
+        await onboardingAPI.savePermissions(onboardingData.permissions);
+      }
+      if (onboardingData.dataSource) {
+        await onboardingAPI.saveDataSource(onboardingData.dataSource);
+      }
+      if (onboardingData.triggers) {
+        await onboardingAPI.saveTriggers(onboardingData.triggers);
+      }
+      
+      // Mark onboarding as complete
+      await onboardingAPI.complete();
+      
+      // Clear context data
+      clearOnboardingData();
+      
+      // Navigate to dashboard
+      router.replace('/dashboard');
+    } catch (error: any) {
+      console.error('Error saving onboarding data:', error);
+      Alert.alert('Error', 'Failed to save your data. Please try again.');
+      throw error;
+    }
+  };
+
+  const handleContinue = async () => {
     setCompleting(true);
     try {
+      // Check if user is already signed in
+      if (isSignedIn) {
+        // User is already signed in, just save the data
+        await saveOnboardingData();
+        return;
+      }
+
+      // User not signed in, initiate Google OAuth
       const { createdSessionId, setActive } = await startOAuthFlow();
       
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
         
-        // Get auth token
-        const token = await getToken();
-        setAuthToken(token);
-
-        // Save user to database
-        if (user) {
-          await userAPI.createOrUpdate({
-            email: user.emailAddresses[0]?.emailAddress || '',
-            firstName: user.firstName || '',
-            lastName: user.lastName || '',
-          });
-        }
-
-        // Save all onboarding data
-        if (onboardingData.permissions) {
-          await onboardingAPI.savePermissions(onboardingData.permissions);
-        }
-        if (onboardingData.dataSource) {
-          await onboardingAPI.saveDataSource(onboardingData.dataSource);
-        }
-        if (onboardingData.triggers) {
-          await onboardingAPI.saveTriggers(onboardingData.triggers);
-        }
-        
-        // Mark onboarding as complete
-        await onboardingAPI.complete();
-        
-        // Clear context data
-        clearOnboardingData();
-        
-        // Navigate to dashboard
-        router.replace('/dashboard');
+        // Save data after successful sign-in
+        await saveOnboardingData();
       }
     } catch (error: any) {
-      console.error('Error with Google sign-in:', error);
-      Alert.alert('Error', 'Failed to sign in with Google. Please try again.');
+      console.error('Error with sign-in or saving data:', error);
+      Alert.alert('Error', 'Failed to complete setup. Please try again.');
     } finally {
       setCompleting(false);
     }
@@ -212,7 +231,7 @@ export default function DashboardIntroScreen() {
       {/* Bottom Navigation */}
       <View className="px-8 pb-8 bg-white border-t border-gray-100">
         <TouchableOpacity
-          onPress={handleGoogleSignIn}
+          onPress={handleContinue}
           disabled={completing}
           className="bg-black rounded-full py-5 mb-3 flex-row items-center justify-center"
           activeOpacity={0.8}
@@ -222,15 +241,17 @@ export default function DashboardIntroScreen() {
           ) : (
             <>
               <Text className="text-white text-center text-lg font-semibold mr-2">
-                Sign in with Google
+                {isSignedIn ? 'Continue to Dashboard' : 'Sign in with Google'}
               </Text>
-              <Text className="text-white text-xl">🔐</Text>
+              <Text className="text-white text-xl">{isSignedIn ? '→' : '🔐'}</Text>
             </>
           )}
         </TouchableOpacity>
         
         <Text className="text-xs text-gray-500 text-center px-4 mb-3">
-          Sign in to save your data securely and sync across devices
+          {isSignedIn 
+            ? 'Your data will be saved securely to your account' 
+            : 'Sign in to save your data securely and sync across devices'}
         </Text>
         
         <TouchableOpacity
