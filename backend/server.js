@@ -224,6 +224,195 @@ app.get('/api/metrics/:clerkId', requireAuth(), async (req, res) => {
   }
 });
 
+// ==================== PASSIVE DATA COLLECTION ROUTES ====================
+
+// Phone data (screen time, notifications, activity, typing)
+app.post('/api/metrics/phone', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { screenTimeMinutes, notificationCount, activityLevel, typingSpeed, typingErrors, deviceInfo } = req.body;
+
+    const metric = new Metric({
+      userId,
+      clerkId: userId,
+      timestamp: new Date(),
+      screenTime: screenTimeMinutes,
+      notifications: notificationCount,
+      activityLevel,
+      typingSpeed,
+      typingErrors,
+      deviceInfo,
+      dataSource: 'phone',
+    });
+
+    await metric.save();
+    res.status(201).json({ success: true, metric });
+  } catch (error) {
+    console.error('Error saving phone data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Calendar data (events, busy hours, stress score)
+app.post('/api/metrics/calendar', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { eventsToday, busyHoursToday, stressScore, upcomingHighStressPeriods } = req.body;
+
+    const metric = new Metric({
+      userId,
+      clerkId: userId,
+      timestamp: new Date(),
+      calendarEvents: eventsToday,
+      busyHours: busyHoursToday,
+      calendarStress: stressScore,
+      upcomingStress: upcomingHighStressPeriods,
+      dataSource: 'calendar',
+    });
+
+    await metric.save();
+    res.status(201).json({ success: true, metric });
+  } catch (error) {
+    console.error('Error saving calendar data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Sleep data (duration, quality, sleep debt, restlessness)
+app.post('/api/metrics/sleep', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { sleepStartTime, sleepEndTime, totalSleepMinutes, sleepQuality, sleepDebt, restlessness, isInferred } = req.body;
+
+    const metric = new Metric({
+      userId,
+      clerkId: userId,
+      timestamp: new Date(),
+      sleepStart: sleepStartTime,
+      sleepEnd: sleepEndTime,
+      sleepDuration: totalSleepMinutes,
+      sleepQuality,
+      sleepDebt,
+      restlessness,
+      isInferred,
+      dataSource: 'sleep',
+    });
+
+    await metric.save();
+    res.status(201).json({ success: true, metric });
+  } catch (error) {
+    console.error('Error saving sleep data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Location & Weather data (temperature, humidity, pressure, UV)
+app.post('/api/metrics/location', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { location, weather } = req.body;
+
+    const metric = new Metric({
+      userId,
+      clerkId: userId,
+      timestamp: new Date(),
+      latitude: location.latitude,
+      longitude: location.longitude,
+      city: location.city,
+      temperature: weather.temperature,
+      humidity: weather.humidity,
+      pressure: weather.pressure,
+      uvIndex: weather.uvIndex,
+      weatherCondition: weather.condition,
+      dataSource: 'location',
+    });
+
+    await metric.save();
+    res.status(201).json({ success: true, metric });
+  } catch (error) {
+    console.error('Error saving location/weather data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Wearable/Simulated data (HRV, heart rate, stress, steps)
+app.post('/api/metrics/wearable', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { hrv, heartRate, stress, sleepQuality, steps, isSimulated } = req.body;
+
+    const metric = new Metric({
+      userId,
+      clerkId: userId,
+      timestamp: new Date(),
+      hrv,
+      heartRate,
+      stress,
+      sleepQuality,
+      steps,
+      isSimulated,
+      dataSource: 'wearable',
+    });
+
+    await metric.save();
+    
+    // Calculate and update risk score based on wearable data
+    const riskScore = calculateRiskFromMetrics({
+      hrv,
+      heartRate,
+      stress,
+      sleepQuality,
+    });
+    
+    // Save risk history
+    const riskHistory = new RiskHistory({
+      userId,
+      clerkId: userId,
+      riskScore,
+      timestamp: new Date(),
+      factors: {
+        hrv: hrv < 40 ? 'High' : hrv < 55 ? 'Medium' : 'Low',
+        heartRate: heartRate > 85 ? 'High' : 'Normal',
+        stress: stress > 70 ? 'High' : stress > 40 ? 'Medium' : 'Low',
+        sleep: sleepQuality < 50 ? 'Poor' : sleepQuality < 70 ? 'Fair' : 'Good',
+      },
+    });
+    
+    await riskHistory.save();
+
+    res.status(201).json({ success: true, metric, riskScore });
+  } catch (error) {
+    console.error('Error saving wearable data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Helper function to calculate risk from metrics
+function calculateRiskFromMetrics(metrics) {
+  let risk = 0;
+  
+  // HRV factor (lower HRV = higher risk)
+  if (metrics.hrv < 30) risk += 40;
+  else if (metrics.hrv < 45) risk += 25;
+  else if (metrics.hrv < 55) risk += 10;
+  
+  // Heart rate factor (higher HR = higher risk)
+  if (metrics.heartRate > 90) risk += 20;
+  else if (metrics.heartRate > 80) risk += 10;
+  
+  // Stress factor
+  if (metrics.stress > 75) risk += 25;
+  else if (metrics.stress > 50) risk += 15;
+  else if (metrics.stress > 30) risk += 5;
+  
+  // Sleep quality factor (lower quality = higher risk)
+  if (metrics.sleepQuality < 40) risk += 30;
+  else if (metrics.sleepQuality < 60) risk += 20;
+  else if (metrics.sleepQuality < 75) risk += 10;
+  
+  return Math.min(100, risk);
+}
+
 // ==================== RISK CALCULATION ROUTE ====================
 
 app.get('/api/risk/:clerkId', requireAuth(), async (req, res) => {

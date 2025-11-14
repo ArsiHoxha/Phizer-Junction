@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth, useUser, useSignIn, useOAuth } from '@clerk/clerk-expo';
 import Animated, { FadeInDown, FadeInUp, FadeIn } from 'react-native-reanimated';
@@ -12,10 +12,17 @@ WebBrowser.maybeCompleteAuthSession();
 export default function DashboardIntroScreen() {
   const router = useRouter();
   const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, isLoaded } = useAuth();
   const { user } = useUser();
   const { onboardingData, clearOnboardingData } = useOnboarding();
   const [completing, setCompleting] = useState(false);
+
+  // Redirect if already signed in (shouldn't normally reach here, but just in case)
+  useEffect(() => {
+    if (isLoaded && isSignedIn && !completing) {
+      router.replace('/(tabs)');
+    }
+  }, [isLoaded, isSignedIn, completing]);
 
   const saveOnboardingData = async () => {
     try {
@@ -49,8 +56,8 @@ export default function DashboardIntroScreen() {
       // Clear context data
       clearOnboardingData();
       
-      // Navigate to dashboard
-      router.replace('/dashboard');
+      // Navigate to dashboard tabs
+      router.replace('/(tabs)');
     } catch (error: any) {
       console.error('Error saving onboarding data:', error);
       Alert.alert('Error', 'Failed to save your data. Please try again.');
@@ -87,34 +94,29 @@ export default function DashboardIntroScreen() {
 
   const features = [
     {
-      icon: '🎯',
       title: 'Migraine Risk Index',
       description: 'Real-time prediction from 0-100% based on your health data',
     },
     {
-      icon: '📊',
       title: 'Trend Analytics',
       description: 'Visual charts tracking HRV, sleep, stress, and screen time',
     },
     {
-      icon: '⚡',
       title: 'Trigger Insights',
       description: 'AI identifies your top contributing factors each day',
     },
     {
-      icon: '💡',
       title: 'Personalized Tips',
       description: 'Smart recommendations to prevent migraines before they start',
     },
     {
-      icon: '🔔',
       title: 'Voice Alerts',
       description: 'Get notified when your risk level increases',
     },
   ];
 
   return (
-    <View className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" />
       
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
@@ -167,11 +169,8 @@ export default function DashboardIntroScreen() {
             <Animated.View
               key={index}
               entering={FadeInUp.duration(500).delay(400 + index * 100)}
-              className="mb-5 flex-row"
+              className="mb-5"
             >
-              <View className="w-14 h-14 rounded-2xl bg-gray-100 items-center justify-center mr-4">
-                <Text className="text-3xl">{feature.icon}</Text>
-              </View>
               <View className="flex-1">
                 <Text className="text-lg font-semibold text-black mb-1">
                   {feature.title}
@@ -220,7 +219,7 @@ export default function DashboardIntroScreen() {
           className="mx-8 mb-8 p-6 bg-black rounded-3xl"
         >
           <Text className="text-white font-semibold text-base mb-2">
-            ✨ Remember
+            Remember
           </Text>
           <Text className="text-gray-300 text-sm leading-6">
             Everything happens automatically. Just live your life, and we'll watch over your health.
@@ -239,12 +238,9 @@ export default function DashboardIntroScreen() {
           {completing ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <>
-              <Text className="text-white text-center text-lg font-semibold mr-2">
-                {isSignedIn ? 'Continue to Dashboard' : 'Sign in with Google'}
-              </Text>
-              <Text className="text-white text-xl">{isSignedIn ? '→' : '🔐'}</Text>
-            </>
+            <Text className="text-white text-center text-lg font-semibold">
+              {isSignedIn ? 'Continue to Dashboard' : 'Sign in with Google'}
+            </Text>
           )}
         </TouchableOpacity>
         
@@ -262,6 +258,6 @@ export default function DashboardIntroScreen() {
           <Text className="text-gray-500 text-center">Back</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { useOnboarding } from '../../contexts/OnboardingContext';
 
@@ -8,40 +9,44 @@ interface Permission {
   id: string;
   title: string;
   description: string;
-  icon: string;
   enabled: boolean;
 }
 
 export default function PermissionsScreen() {
   const router = useRouter();
+  const { isSignedIn, isLoaded } = useAuth();
   const { setPermissions: savePermissions } = useOnboarding();
+
+  // Redirect if already signed in
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace('/(tabs)');
+    }
+  }, [isLoaded, isSignedIn]);
+
   const [permissions, setPermissions] = useState<Permission[]>([
     {
       id: 'notifications',
       title: 'Notifications',
       description: 'Receive alerts when migraine risk is high',
-      icon: '🔔',
       enabled: false,
     },
     {
       id: 'passive',
       title: 'Passive Data Collection',
       description: 'Monitor screen time, activity, and phone usage patterns',
-      icon: '📊',
       enabled: false,
     },
     {
       id: 'calendar',
       title: 'Calendar Access',
       description: 'Analyze stress periods from your schedule',
-      icon: '📅',
       enabled: false,
     },
     {
       id: 'location',
       title: 'Location & Weather',
       description: 'Track environmental triggers like pressure and temperature',
-      icon: '🌦️',
       enabled: false,
     },
   ]);
@@ -68,7 +73,7 @@ export default function PermissionsScreen() {
   };
 
   return (
-    <View className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" />
       
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
@@ -103,7 +108,6 @@ export default function PermissionsScreen() {
               >
                 <View className="flex-row items-center justify-between mb-3">
                   <View className="flex-row items-center flex-1">
-                    <Text className="text-3xl mr-4">{permission.icon}</Text>
                     <Text className={`text-lg font-semibold ${
                       permission.enabled ? 'text-white' : 'text-black'
                     }`}>
@@ -166,6 +170,6 @@ export default function PermissionsScreen() {
           <Text className="text-gray-500 text-center">Back</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }

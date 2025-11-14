@@ -1,18 +1,32 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, TouchableOpacity, StatusBar, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { isSignedIn, isLoaded } = useAuth();
+
+  useEffect(() => {
+    // If user is already signed in, redirect to dashboard
+    if (isLoaded && isSignedIn) {
+      router.replace('/(tabs)');
+    }
+  }, [isLoaded, isSignedIn]);
 
   const handleGetStarted = () => {
     // Go directly to onboarding
     router.push('/onboarding/permissions');
   };
 
+  // Don't render the welcome screen if user is signed in
+  if (!isLoaded || isSignedIn) {
+    return null;
+  }
+
   return (
-    <View className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" />
       
       {/* Header Section */}
@@ -66,6 +80,6 @@ export default function WelcomeScreen() {
           Your health data stays private and secure on your device
         </Text>
       </Animated.View>
-    </View>
+    </SafeAreaView>
   );
 }

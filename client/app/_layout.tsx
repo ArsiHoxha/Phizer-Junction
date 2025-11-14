@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 import '../global.css';
 import { CLERK_PUBLISHABLE_KEY } from '../config/config';
 import { OnboardingProvider } from '../contexts/OnboardingContext';
+import { DataCollectionProvider } from '../contexts/DataCollectionContext';
 
 // Token cache for Clerk
 const tokenCache = {
@@ -33,7 +34,8 @@ export default function RootLayout() {
       tokenCache={tokenCache}
     >
       <OnboardingProvider>
-        <ClerkLoaded>
+        <DataCollectionProvider>
+          <ClerkLoaded>
         <Stack
           screenOptions={{
             headerShown: false,
@@ -54,6 +56,13 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding/trigger-personalization" />
           <Stack.Screen name="onboarding/dashboard-intro" />
           <Stack.Screen 
+            name="(tabs)"
+            options={{
+              animation: 'fade',
+              gestureEnabled: false,
+            }}
+          />
+          <Stack.Screen 
             name="dashboard"
             options={{
               animation: 'fade',
@@ -63,6 +72,7 @@ export default function RootLayout() {
         </Stack>
         <StatusBar style="dark" />
       </ClerkLoaded>
+        </DataCollectionProvider>
       </OnboardingProvider>
     </ClerkProvider>
   );

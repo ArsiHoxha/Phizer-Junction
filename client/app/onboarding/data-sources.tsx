@@ -1,25 +1,35 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useOnboarding } from '../../contexts/OnboardingContext';
 
 export default function DataSourcesScreen() {
   const router = useRouter();
+  const { isSignedIn, isLoaded } = useAuth();
   const { setDataSource: saveDataSource } = useOnboarding();
+
+  // Redirect if already signed in
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace('/(tabs)');
+    }
+  }, [isLoaded, isSignedIn]);
+
   const [selectedMode, setSelectedMode] = useState<'phone' | 'wearable' | null>(null);
   const [wearableType, setWearableType] = useState<string | null>(null);
 
   const wearables = [
-    { id: 'apple', name: 'Apple Watch', icon: '⌚' },
-    { id: 'fitbit', name: 'Fitbit', icon: '⌚' },
-    { id: 'garmin', name: 'Garmin', icon: '⌚' },
-    { id: 'samsung', name: 'Samsung Galaxy', icon: '⌚' },
-    { id: 'none', name: 'Simulate Data', icon: '📱' },
+    { id: 'apple', name: 'Apple Watch' },
+    { id: 'fitbit', name: 'Fitbit' },
+    { id: 'garmin', name: 'Garmin' },
+    { id: 'samsung', name: 'Samsung Galaxy' },
+    { id: 'none', name: 'Simulate Data' },
   ];
 
   return (
-    <View className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" />
       
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
@@ -49,7 +59,6 @@ export default function DataSourcesScreen() {
               activeOpacity={0.7}
             >
               <View className="items-center">
-                <Text className="text-5xl mb-4">📱</Text>
                 <Text className={`text-2xl font-bold mb-2 ${
                   selectedMode === 'phone' ? 'text-white' : 'text-black'
                 }`}>
@@ -75,7 +84,6 @@ export default function DataSourcesScreen() {
               activeOpacity={0.7}
             >
               <View className="items-center">
-                <Text className="text-5xl mb-4">⌚</Text>
                 <Text className={`text-2xl font-bold mb-2 ${
                   selectedMode === 'wearable' ? 'text-white' : 'text-black'
                 }`}>
@@ -115,7 +123,6 @@ export default function DataSourcesScreen() {
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
-                    <Text className="text-2xl mr-4">{device.icon}</Text>
                     <Text className={`text-base font-medium ${
                       wearableType === device.id ? 'text-white' : 'text-black'
                     }`}>
@@ -181,6 +188,6 @@ export default function DataSourcesScreen() {
           <Text className="text-gray-500 text-center">Back</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }

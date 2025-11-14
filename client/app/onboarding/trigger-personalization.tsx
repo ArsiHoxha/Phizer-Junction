@@ -1,29 +1,38 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { useOnboarding } from '../../contexts/OnboardingContext';
 
 interface Trigger {
   id: string;
   name: string;
-  icon: string;
   selected: boolean;
 }
 
 export default function TriggerPersonalizationScreen() {
   const router = useRouter();
+  const { isSignedIn, isLoaded } = useAuth();
   const { setTriggers: saveTriggers } = useOnboarding();
+
+  // Redirect if already signed in
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace('/(tabs)');
+    }
+  }, [isLoaded, isSignedIn]);
+
   const [frequency, setFrequency] = useState<string>('');
   const [triggers, setTriggers] = useState<Trigger[]>([
-    { id: 'stress', name: 'Stress', icon: '😰', selected: false },
-    { id: 'screen', name: 'Screen Time', icon: '📱', selected: false },
-    { id: 'sleep', name: 'Poor Sleep', icon: '😴', selected: false },
-    { id: 'noise', name: 'Loud Noise', icon: '🔊', selected: false },
-    { id: 'weather', name: 'Weather Changes', icon: '🌦️', selected: false },
-    { id: 'hormones', name: 'Hormonal', icon: '🧬', selected: false },
-    { id: 'food', name: 'Food & Drink', icon: '🍷', selected: false },
-    { id: 'light', name: 'Bright Light', icon: '💡', selected: false },
+    { id: 'stress', name: 'Stress', selected: false },
+    { id: 'screen', name: 'Screen Time', selected: false },
+    { id: 'sleep', name: 'Poor Sleep', selected: false },
+    { id: 'noise', name: 'Loud Noise', selected: false },
+    { id: 'weather', name: 'Weather Changes', selected: false },
+    { id: 'hormones', name: 'Hormonal', selected: false },
+    { id: 'food', name: 'Food & Drink', selected: false },
+    { id: 'light', name: 'Bright Light', selected: false },
   ]);
 
   const frequencies = [
@@ -42,7 +51,7 @@ export default function TriggerPersonalizationScreen() {
   const canContinue = frequency && triggers.some(t => t.selected);
 
   return (
-    <View className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" />
       
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
@@ -131,7 +140,6 @@ export default function TriggerPersonalizationScreen() {
                   }`}
                   activeOpacity={0.7}
                 >
-                  <Text className="text-3xl mb-2">{trigger.icon}</Text>
                   <Text className={`text-sm font-medium text-center ${
                     trigger.selected ? 'text-white' : 'text-black'
                   }`}>
@@ -192,6 +200,6 @@ export default function TriggerPersonalizationScreen() {
           <Text className="text-gray-500 text-center">Back</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
