@@ -3,7 +3,7 @@ const { ElevenLabsClient } = require('elevenlabs');
 // Initialize ElevenLabs client
 // Get your API key from: https://elevenlabs.io/app/settings/api-keys
 const elevenlabs = new ElevenLabsClient({
-  apiKey: 'sk_ba3b835fac3dd2ff1d89d325ef984a30c230feb4a6f9eb63'
+  apiKey: 'sk_349f2a2b6f868b5e9bee141861ea330121d93d9bbe324720'
 });
 
 async function textToSpeech(text) {

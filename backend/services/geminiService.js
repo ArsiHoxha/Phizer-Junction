@@ -5,7 +5,7 @@ const genAI = new GoogleGenerativeAI('AIzaSyCR2rMxmJxiC44jnCtvfS-bqLGJhoXQq4c');
 
 async function analyzeHealthData(healthData) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
     const prompt = `You are a medical AI assistant specialized in migraine analysis and prevention. Analyze the following health data and provide personalized insights.
 
