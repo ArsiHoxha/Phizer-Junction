@@ -5,6 +5,7 @@ const { clerkMiddleware, requireAuth } = require('@clerk/express');
 const { analyzeHealthData, getTriggerInsights } = require('./services/geminiService');
 const { textToSpeech } = require('./services/elevenLabsService');
 const { getCurrentWeather, getWeatherForecast, detectPressureDrops } = require('./services/weatherService');
+const { monitorUserForPatterns } = require('./services/patternMonitoring');
 require('dotenv').config();
 
 const app = express();
@@ -280,6 +281,23 @@ app.post('/api/metrics', requireAuth(), async (req, res) => {
     });
 
     await metric.save();
+    
+    // 🚨 NEW: Pattern Recognition - Check if current metrics match past migraine patterns
+    monitorUserForPatterns(userId, {
+      hrv: metricsData.hrv,
+      stress: metricsData.stress,
+      sleepQuality: metricsData.sleepQuality,
+      screenTime: metricsData.screenTime,
+      pressure: metricsData.pressure,
+      temperature: metricsData.temperature,
+    }).then(result => {
+      if (result.shouldAlert) {
+        console.log('🚨 MIGRAINE PATTERN DETECTED - Alert should be sent:', result.alertData);
+        // TODO: Send push notification to user's device
+        // This would trigger NotificationService on client to show warning
+      }
+    }).catch(err => console.error('Pattern monitoring error:', err));
+    
     res.status(201).json({ success: true, metric });
   } catch (error) {
     console.error('Error saving metrics:', error);
@@ -1117,6 +1135,7 @@ app.post('/api/ai/triggers', requireAuth(), async (req, res) => {
 app.post('/api/migraine/quick-log', requireAuth(), async (req, res) => {
   try {
     const { userId } = req.auth;
+    const { currentMetrics } = req.body;
 
     // Get current user data
     const user = await User.findOne({ clerkId: userId });
@@ -1124,25 +1143,38 @@ app.post('/api/migraine/quick-log', requireAuth(), async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Get latest metrics
-    const latestMetric = await Metric.findOne({ clerkId: userId }).sort({ timestamp: -1 });
+    // Use frontend-provided metrics first (most accurate for "right now")
+    // Fallback to database query if not provided
+    let metricsSnapshot = currentMetrics || {};
+    
+    if (!currentMetrics || Object.keys(currentMetrics).length === 0) {
+      // Fallback: Get latest metrics from database
+      console.log('⚠️ No frontend metrics provided, falling back to database');
+      const latestMetric = await Metric.findOne({ clerkId: userId }).sort({ timestamp: -1 });
 
-    // Create metrics snapshot
-    const metricsSnapshot = latestMetric ? {
-      hrv: latestMetric.hrv,
-      heartRate: latestMetric.heartRate,
-      stress: latestMetric.stress,
-      sleepQuality: latestMetric.sleepQuality,
-      sleepHours: latestMetric.sleepDuration ? latestMetric.sleepDuration / 60 : null,
-      screenTime: latestMetric.screenTime,
-      weather: {
-        temperature: latestMetric.temperature,
-        humidity: latestMetric.humidity,
-        pressure: latestMetric.pressure,
-        condition: latestMetric.weatherCondition,
-      },
-      calendarLoad: latestMetric.calendarEvents,
-    } : {};
+      metricsSnapshot = latestMetric ? {
+        hrv: latestMetric.hrv,
+        heartRate: latestMetric.heartRate,
+        stress: latestMetric.stress,
+        sleepQuality: latestMetric.sleepQuality,
+        sleepHours: latestMetric.sleepDuration ? latestMetric.sleepDuration / 60 : null,
+        screenTime: latestMetric.screenTime,
+        weather: {
+          temperature: latestMetric.temperature,
+          humidity: latestMetric.humidity,
+          pressure: latestMetric.pressure,
+          condition: latestMetric.weatherCondition,
+        },
+        calendarLoad: latestMetric.calendarEvents,
+      } : {};
+    } else {
+      console.log('✅ Using frontend-provided metrics:', Object.keys(currentMetrics));
+    }
+
+    // Validate we have at least some metrics
+    if (Object.keys(metricsSnapshot).length === 0) {
+      console.warn('⚠️ No metrics available for migraine log!');
+    }
 
     // Create migraine log (auto-captured, no user input needed)
     const migraineLog = new MigraineLog({
@@ -1156,6 +1188,13 @@ app.post('/api/migraine/quick-log', requireAuth(), async (req, res) => {
     });
 
     await migraineLog.save();
+    
+    console.log('📊 Migraine logged with metrics:', {
+      hasHRV: !!metricsSnapshot.hrv,
+      hasStress: !!metricsSnapshot.stress,
+      hasSleep: !!metricsSnapshot.sleepHours,
+      hasWeather: !!metricsSnapshot.weather?.pressure,
+    });
 
     // Trigger AI analysis and learning asynchronously
     performAIAnalysisAndLearn(migraineLog._id, userId).catch(err => 
@@ -1255,6 +1294,25 @@ app.get('/api/migraine/:clerkId', requireAuth(), async (req, res) => {
   }
 });
 
+// Check for pattern matches (used for notifications)
+app.post('/api/migraine/check-patterns', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { currentMetrics } = req.body;
+
+    const { checkPatternMatch } = require('./services/patternMonitoring');
+    const result = await checkPatternMatch(userId, currentMetrics);
+
+    res.status(200).json({
+      success: true,
+      patternMatch: result,
+    });
+  } catch (error) {
+    console.error('Error checking patterns:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get AI analysis for a specific migraine
 app.get('/api/migraine/:migraineId/analysis', requireAuth(), async (req, res) => {
   try {
@@ -1285,7 +1343,7 @@ app.get('/api/migraine/:migraineId/analysis', requireAuth(), async (req, res) =>
   }
 });
 
-// AI Analysis Function with Machine Learning (learns patterns and predicts)
+// AI Analysis Function with Gemini AI (learns patterns and predicts)
 async function performAIAnalysisAndLearn(migraineId, clerkId) {
   try {
     const migraineLog = await MigraineLog.findById(migraineId);
@@ -1299,19 +1357,115 @@ async function performAIAnalysisAndLearn(migraineId, clerkId) {
 
     // Get user's triggers
     const user = await User.findOne({ clerkId });
+    
+    const metrics = migraineLog.metricsSnapshot;
+    
+    console.log('🤖 Using Gemini AI to analyze migraine trigger...');
+    
+    // Use Gemini AI to analyze what triggered this migraine
+    const geminiAnalysis = await analyzeHealthData({
+      wearable: {
+        hrv: metrics.hrv,
+        heartRate: metrics.heartRate,
+        stress: metrics.stress,
+      },
+      sleep: {
+        sleepQuality: metrics.sleepQuality,
+        sleepHours: metrics.sleepHours,
+      },
+      phone: {
+        screenTime: metrics.screenTime,
+      },
+      location: {
+        temperature: metrics.weather?.temperature,
+        humidity: metrics.weather?.humidity,
+        pressure: metrics.weather?.pressure,
+        weather: metrics.weather?.condition,
+      },
+      calendar: {
+        upcomingEvents: metrics.calendarLoad || 0,
+      },
+      historicalMigraines: historicalMigraines.map(m => ({
+        timestamp: m.timestamp,
+        metrics: m.metricsSnapshot,
+        severity: m.severity,
+      })),
+    });
 
-    // Analyze metrics snapshot
+    console.log('🧠 Gemini AI Analysis:', geminiAnalysis);
+
+    // Parse Gemini response to extract insights
     const analysis = {
-      confidence: 0,
+      confidence: 85, // Gemini provides high-confidence analysis
       primaryCauses: [],
       recommendations: [],
       similarPatterns: [],
       analysisTimestamp: new Date(),
-      predictiveThresholds: {}, // NEW: Learn thresholds for predictions
+      predictiveThresholds: {}, // Learn thresholds for predictions
+      geminiInsights: geminiAnalysis, // Store full AI response
     };
 
-    const metrics = migraineLog.metricsSnapshot;
+    // Extract key triggers from Gemini analysis (parse AI insights)
+    const aiText = geminiAnalysis.toLowerCase();
     let totalWeight = 0;
+
+    // Parse Gemini's insights to identify primary causes
+    if (aiText.includes('hrv') || aiText.includes('heart rate variability')) {
+      const hrvMatch = aiText.match(/hrv[^\d]*(\d+)/i);
+      const hrvValue = hrvMatch ? parseInt(hrvMatch[1]) : metrics.hrv;
+      analysis.primaryCauses.push({
+        factor: hrvValue < 40 ? 'Very Low HRV' : 'Low HRV',
+        contribution: hrvValue < 40 ? 25 : 15,
+        explanation: `Gemini detected HRV of ${Math.round(hrvValue || metrics.hrv)}ms - ${aiText.includes('stress') ? 'indicating high stress' : 'below optimal'}`
+      });
+      totalWeight += (hrvValue < 40 ? 25 : 15);
+    }
+
+    if (aiText.includes('stress') && metrics.stress) {
+      analysis.primaryCauses.push({
+        factor: metrics.stress > 70 ? 'High Stress' : 'Moderate Stress',
+        contribution: metrics.stress > 70 ? 30 : 15,
+        explanation: `Stress at ${Math.round(metrics.stress)}% - Gemini identified as primary trigger`
+      });
+      totalWeight += (metrics.stress > 70 ? 30 : 15);
+    }
+
+    if (aiText.includes('sleep') && metrics.sleepQuality) {
+      analysis.primaryCauses.push({
+        factor: metrics.sleepQuality < 50 ? 'Poor Sleep Quality' : 'Below Average Sleep',
+        contribution: metrics.sleepQuality < 50 ? 25 : 12,
+        explanation: `Sleep quality ${Math.round(metrics.sleepQuality)}% - Gemini analysis: ${aiText.includes('depriv') ? 'sleep deprivation detected' : 'insufficient rest'}`
+      });
+      totalWeight += (metrics.sleepQuality < 50 ? 25 : 12);
+    }
+
+    if (aiText.includes('screen') || aiText.includes('blue light')) {
+      const hours = Math.round(metrics.screenTime / 60);
+      analysis.primaryCauses.push({
+        factor: 'Excessive Screen Time',
+        contribution: 15,
+        explanation: `${hours}h screen time - Gemini detected eye strain and blue light exposure`
+      });
+      totalWeight += 15;
+    }
+
+    if (aiText.includes('pressure') || aiText.includes('weather') || aiText.includes('barometric')) {
+      analysis.primaryCauses.push({
+        factor: 'Barometric Pressure Drop',
+        contribution: 20,
+        explanation: `Pressure ${Math.round(metrics.weather?.pressure || 1005)}hPa - Gemini confirmed weather trigger`
+      });
+      totalWeight += 20;
+    }
+
+    if (aiText.includes('temperature') && metrics.weather?.temperature) {
+      analysis.primaryCauses.push({
+        factor: 'Temperature Extreme',
+        contribution: 10,
+        explanation: `Temperature ${Math.round(metrics.weather.temperature)}°C - Gemini flagged environmental factor`
+      });
+      totalWeight += 10;
+    }
 
     // LEARNING ALGORITHM: Calculate average metrics across all past migraines
     const learnedPatterns = {
@@ -1320,6 +1474,7 @@ async function performAIAnalysisAndLearn(migraineId, clerkId) {
       avgSleepQualityAtMigraine: 0,
       avgScreenTimeAtMigraine: 0,
       avgPressureAtMigraine: 0,
+      avgTemperatureAtMigraine: 0,
       count: historicalMigraines.length,
     };
 
@@ -1330,6 +1485,7 @@ async function performAIAnalysisAndLearn(migraineId, clerkId) {
         if (past.metricsSnapshot?.sleepQuality) learnedPatterns.avgSleepQualityAtMigraine += past.metricsSnapshot.sleepQuality;
         if (past.metricsSnapshot?.screenTime) learnedPatterns.avgScreenTimeAtMigraine += past.metricsSnapshot.screenTime;
         if (past.metricsSnapshot?.weather?.pressure) learnedPatterns.avgPressureAtMigraine += past.metricsSnapshot.weather.pressure;
+        if (past.metricsSnapshot?.weather?.temperature) learnedPatterns.avgTemperatureAtMigraine += past.metricsSnapshot.weather.temperature;
       });
 
       learnedPatterns.avgHRVAtMigraine /= historicalMigraines.length;
@@ -1337,118 +1493,45 @@ async function performAIAnalysisAndLearn(migraineId, clerkId) {
       learnedPatterns.avgSleepQualityAtMigraine /= historicalMigraines.length;
       learnedPatterns.avgScreenTimeAtMigraine /= historicalMigraines.length;
       learnedPatterns.avgPressureAtMigraine /= historicalMigraines.length;
+      learnedPatterns.avgTemperatureAtMigraine /= historicalMigraines.length;
 
-      // Set prediction thresholds based on learned patterns
+      // Set SMART prediction thresholds based on learned patterns
       analysis.predictiveThresholds = {
-        hrvWarning: learnedPatterns.avgHRVAtMigraine + 5, // Warn when HRV gets within 5 of migraine avg
-        stressWarning: learnedPatterns.avgStressAtMigraine - 10, // Warn when stress gets within 10 of migraine avg
+        hrvWarning: learnedPatterns.avgHRVAtMigraine + 5, // Warn when approaching migraine HRV
+        stressWarning: learnedPatterns.avgStressAtMigraine - 10, // Warn when stress getting close
         sleepQualityWarning: learnedPatterns.avgSleepQualityAtMigraine + 10,
-        screenTimeWarning: learnedPatterns.avgScreenTimeAtMigraine - 30,
+        screenTimeWarning: Math.max(180, learnedPatterns.avgScreenTimeAtMigraine - 30), // At least 3h warning
         pressureWarning: learnedPatterns.avgPressureAtMigraine + 5,
+        temperatureWarning: learnedPatterns.avgTemperatureAtMigraine,
       };
 
       console.log(`🧠 Learned patterns from ${historicalMigraines.length} past migraines:`, learnedPatterns);
-    }
-
-    // Analyze HRV (Heart Rate Variability)
-    if (metrics.hrv) {
-      if (metrics.hrv < 40) {
-        analysis.primaryCauses.push({
-          factor: 'Very Low HRV',
-          contribution: 25,
-          explanation: `Your HRV was ${Math.round(metrics.hrv)}, critically low indicating high stress.`
-        });
-        totalWeight += 25;
-      } else if (metrics.hrv < 55) {
-        analysis.primaryCauses.push({
-          factor: 'Low HRV',
-          contribution: 15,
-          explanation: `Your HRV was ${Math.round(metrics.hrv)}, below optimal range.`
-        });
-        totalWeight += 15;
-      }
-    }
-
-    // Analyze Stress
-    if (metrics.stress) {
-      if (metrics.stress > 70) {
-        analysis.primaryCauses.push({
-          factor: 'High Stress',
-          contribution: 30,
-          explanation: `Stress level was ${Math.round(metrics.stress)}%, significantly elevated.`
-        });
-        totalWeight += 30;
-      } else if (metrics.stress > 50) {
-        analysis.primaryCauses.push({
-          factor: 'Moderate Stress',
-          contribution: 15,
-          explanation: `Stress level was ${Math.round(metrics.stress)}%, moderately high.`
-        });
-        totalWeight += 15;
-      }
-    }
-
-    // Analyze Sleep
-    if (metrics.sleepQuality) {
-      if (metrics.sleepQuality < 50) {
-        analysis.primaryCauses.push({
-          factor: 'Poor Sleep Quality',
-          contribution: 25,
-          explanation: `Sleep quality was only ${Math.round(metrics.sleepQuality)}%, significantly impacting health.`
-        });
-        totalWeight += 25;
-      } else if (metrics.sleepQuality < 70) {
-        analysis.primaryCauses.push({
-          factor: 'Below Average Sleep',
-          contribution: 12,
-          explanation: `Sleep quality was ${Math.round(metrics.sleepQuality)}%, below optimal.`
-        });
-        totalWeight += 12;
-      }
-    }
-
-    // Analyze Screen Time
-    if (metrics.screenTime && metrics.screenTime > 240) { // 4+ hours
-      const hours = Math.round(metrics.screenTime / 60);
-      analysis.primaryCauses.push({
-        factor: 'Excessive Screen Time',
-        contribution: 15,
-        explanation: `You had ${hours} hours of screen time, causing eye strain and blue light exposure.`
-      });
-      totalWeight += 15;
-    }
-
-    // Analyze Weather (Barometric Pressure)
-    if (metrics.weather?.pressure && metrics.weather.pressure < 1010) {
-      analysis.primaryCauses.push({
-        factor: 'Low Barometric Pressure',
-        contribution: 20,
-        explanation: `Pressure was ${Math.round(metrics.weather.pressure)} hPa, a common environmental trigger.`
-      });
-      totalWeight += 20;
+      console.log(`🎯 Smart thresholds for future warnings:`, analysis.predictiveThresholds);
     }
 
     // Sort by contribution
     analysis.primaryCauses.sort((a, b) => b.contribution - a.contribution);
-
-    // Calculate confidence based on data availability
     analysis.confidence = Math.min(95, totalWeight + 20);
 
-    // Generate recommendations
-    if (analysis.primaryCauses.some(c => c.factor.includes('Stress'))) {
-      analysis.recommendations.push('🧘 Practice stress-reduction: deep breathing, meditation, or gentle yoga');
+    // Generate AI-powered recommendations based on Gemini insights
+    analysis.recommendations = [];
+    if (aiText.includes('stress') || analysis.primaryCauses.some(c => c.factor.includes('Stress'))) {
+      analysis.recommendations.push('🧘 Stress Management: Practice deep breathing, meditation, or gentle yoga for 10-15 minutes');
     }
-    if (analysis.primaryCauses.some(c => c.factor.includes('Sleep'))) {
-      analysis.recommendations.push('😴 Prioritize 7-9 hours of quality sleep with consistent bedtime routine');
+    if (aiText.includes('sleep') || analysis.primaryCauses.some(c => c.factor.includes('Sleep'))) {
+      analysis.recommendations.push('😴 Sleep Priority: Aim for 7-9 hours tonight. Create a dark, cool sleeping environment');
     }
-    if (analysis.primaryCauses.some(c => c.factor.includes('Screen'))) {
-      analysis.recommendations.push('📱 Use 20-20-20 rule for screens. Enable blue light filters');
+    if (aiText.includes('screen') || analysis.primaryCauses.some(c => c.factor.includes('Screen'))) {
+      analysis.recommendations.push('📱 Screen Break: Use 20-20-20 rule. Enable blue light filters. Take a 2-hour screen break');
     }
-    if (analysis.primaryCauses.some(c => c.factor.includes('HRV'))) {
-      analysis.recommendations.push('❤️ Improve HRV through exercise, hydration, and stress management');
+    if (aiText.includes('hrv') || analysis.primaryCauses.some(c => c.factor.includes('HRV'))) {
+      analysis.recommendations.push('❤️ HRV Boost: Stay hydrated, do light exercise, practice breathing exercises');
     }
-    if (analysis.primaryCauses.some(c => c.factor.includes('Pressure'))) {
-      analysis.recommendations.push('🌤️ Monitor weather forecasts and take preventive measures during low-pressure');
+    if (aiText.includes('pressure') || aiText.includes('weather')) {
+      analysis.recommendations.push('🌤️ Weather Watch: Monitor forecasts. Take preventive medication during pressure drops');
+    }
+    if (aiText.includes('hydration') || aiText.includes('water')) {
+      analysis.recommendations.push('💧 Hydration: Drink 8 glasses of water today to prevent dehydration triggers');
     }
 
     // Find similar patterns in history

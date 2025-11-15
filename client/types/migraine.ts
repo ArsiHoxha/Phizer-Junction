@@ -165,6 +165,7 @@ export interface MigraineLog {
 export interface QuickLogRequest {
   severity?: number;  // Optional - AI can infer from metrics
   notes?: string;     // Optional quick note
+  currentMetrics?: MetricsSnapshot;  // Send current frontend data to ensure we have metrics
 }
 
 /**

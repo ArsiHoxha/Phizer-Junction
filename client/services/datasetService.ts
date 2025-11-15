@@ -13,12 +13,14 @@ const DATASET_MODE_KEY = '@health_dataset_mode';
 export type DatasetMode = 'sequential' | 'time-based' | 'random' | 'disabled';
 
 class DatasetService {
-  private currentIndex: number = 60; // START AT HIGH-RISK ENTRY FOR DEMO
+  private currentIndex: number = 0; // Will be set to high-risk in constructor
   private mode: DatasetMode = 'sequential';
   private startTime: Date | null = null;
 
   constructor() {
-    this.loadState();
+    // HACKATHON MODE: Always start at high-risk entry for demo
+    this.currentIndex = 0; // Start at beginning (now has high risk)
+    this.saveState();
   }
 
   /**
@@ -80,8 +82,10 @@ class DatasetService {
 
     switch (this.mode) {
       case 'sequential':
-        dataPoint = getNextDataPoint();
+        // Use our index, not the global one
+        dataPoint = getDataPoint(this.currentIndex);
         this.currentIndex = (this.currentIndex + 1) % HEALTH_DATASET.length;
+        console.log(`📊 Dataset: Entry #${this.currentIndex}/${HEALTH_DATASET.length}`);
         break;
 
       case 'time-based':
@@ -111,7 +115,7 @@ class DatasetService {
    * Get current data point without progressing
    */
   public getCurrent(): HealthDataPoint {
-    return getCurrentDataPoint();
+    return getDataPoint(this.currentIndex);
   }
 
   /**
@@ -122,11 +126,11 @@ class DatasetService {
   }
 
   /**
-   * Reset to beginning
+   * Reset to high-risk entry (for hackathon demo)
    */
   public async reset() {
     resetDataIndex();
-    this.currentIndex = 0;
+    this.currentIndex = 0; // Start from beginning (now has high-risk entries)
     this.startTime = null;
     await this.saveState();
   }
@@ -218,7 +222,36 @@ class DatasetService {
       eventsToday: dataPoint.calendarEvents,
       busyHoursToday: Math.floor(dataPoint.calendarEvents * 1.5),
       stressScore: dataPoint.calendarStress,
+      load: dataPoint.calendarStress, // Add alias for calendar load
       upcomingHighStressPeriods: dataPoint.calendarStress > 60 ? ['Next 3 hours'] : [],
+    };
+  }
+
+  /**
+   * Convert dataset entry to sleep data format
+   */
+  public toSleepData(dataPoint: HealthDataPoint) {
+    // Calculate sleep metrics from dataset
+    const sleepMinutes = dataPoint.sleepHours * 60;
+    const optimalSleep = 8 * 60; // 8 hours optimal
+    const sleepDebt = Math.max(0, (optimalSleep - sleepMinutes) / 60);
+    
+    // Estimate sleep session times (assume sleep from 11pm to wake)
+    const today = new Date();
+    const sleepStart = new Date(today);
+    sleepStart.setHours(23, 0, 0, 0); // 11 PM
+    const sleepEnd = new Date(sleepStart);
+    sleepEnd.setHours(23 + dataPoint.sleepHours, 0, 0, 0);
+    
+    return {
+      sleepStartTime: sleepStart.toISOString(),
+      sleepEndTime: sleepEnd.toISOString(),
+      totalSleepMinutes: sleepMinutes,
+      sleepHours: dataPoint.sleepHours,
+      sleepQuality: dataPoint.sleepQuality,
+      sleepDebt: sleepDebt,
+      restlessness: dataPoint.sleepQuality < 60 ? 'High' : dataPoint.sleepQuality < 80 ? 'Medium' : 'Low',
+      isInferred: false, // Dataset values are "real"
     };
   }
 

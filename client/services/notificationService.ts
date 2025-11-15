@@ -15,7 +15,7 @@ Notifications.setNotificationHandler({
 
 export class NotificationService {
   private static lastNotificationTime: number = 0;
-  private static readonly NOTIFICATION_COOLDOWN = 30 * 60 * 1000; // 30 minutes
+  private static readonly NOTIFICATION_COOLDOWN = 2 * 60 * 1000; // 2 minutes for DEMO (was 30 min)
 
   static async requestPermissions(): Promise<boolean> {
     try {
@@ -52,15 +52,17 @@ export class NotificationService {
 
   static async checkAndNotifyRiskLevel(riskLevel: number): Promise<void> {
     try {
-      // Check if we're in cooldown period
+      // HACKATHON DEMO: Always check, reduced cooldown
       const now = Date.now();
       if (now - this.lastNotificationTime < this.NOTIFICATION_COOLDOWN) {
+        console.log('⏰ Notification on cooldown, skipping');
         return;
       }
 
-      // Check if notifications are enabled
+      // Check if notifications are enabled (default to true for demo)
       const notificationsEnabled = await AsyncStorage.getItem('notifications_enabled');
       if (notificationsEnabled === 'false') {
+        console.log('🔕 Notifications disabled by user');
         return;
       }
 
@@ -68,21 +70,24 @@ export class NotificationService {
       let body = '';
       let shouldNotify = false;
 
-      if (riskLevel >= 70) {
+      // DEMO MODE: More aggressive thresholds
+      if (riskLevel >= 60) {
         shouldNotify = true;
-        title = '🔴 High Migraine Risk Alert';
-        body = 'Your migraine risk is at ' + riskLevel + '%. Take action now: rest in a dark room, stay hydrated, and avoid triggers.';
-      } else if (riskLevel >= 50) {
+        title = '🔴 HIGH MIGRAINE RISK ALERT';
+        body = 'Your migraine risk is at ' + riskLevel + '%. TAKE ACTION NOW: Rest in dark room, take medication if prescribed, avoid all triggers.';
+      } else if (riskLevel >= 40) {
         shouldNotify = true;
-        title = '🟡 Moderate Migraine Risk';
-        body = 'Your migraine risk is at ' + riskLevel + '%. Take a break, drink water, and monitor your symptoms closely.';
+        title = '� MODERATE-HIGH MIGRAINE RISK';
+        body = 'Your migraine risk is at ' + riskLevel + '%. Take preventive action: reduce stress, stay hydrated, monitor symptoms.';
       } else if (riskLevel >= 30) {
         shouldNotify = true;
-        title = '⚠️ Elevated Migraine Risk';
-        body = 'Your risk level is at ' + riskLevel + '%. Stay mindful of triggers and maintain healthy habits.';
+        title = '🟡 ELEVATED MIGRAINE RISK';
+        body = 'Your risk level is at ' + riskLevel + '%. Warning signs detected - stay mindful of triggers and maintain healthy habits.';
       }
 
       if (shouldNotify) {
+        console.log(`📢 Sending notification: ${title} (Risk: ${riskLevel}%)`);
+        
         await Notifications.scheduleNotificationAsync({
           content: {
             title,
@@ -96,6 +101,9 @@ export class NotificationService {
         });
 
         this.lastNotificationTime = now;
+        console.log('✅ Notification sent successfully');
+      } else {
+        console.log(`ℹ️ Risk ${riskLevel}% below threshold, no notification`);
       }
     } catch (error) {
       console.error('Error sending notification:', error);

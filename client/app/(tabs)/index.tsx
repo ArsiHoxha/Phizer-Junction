@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NotificationService } from '../../services/notificationService';
 import WidgetDataService from '../../services/widgetDataService';
 import { userAPI, setAuthToken } from '../../services/api';
+import * as StreakService from '../../services/streakService';
 
 const { width } = Dimensions.get('window');
 
@@ -46,11 +47,16 @@ export default function DashboardScreen() {
   const [userTriggers, setUserTriggers] = useState<string[]>([]);
   const [loadingTriggers, setLoadingTriggers] = useState(true);
 
+  // Streak tracking
+  const [streakData, setStreakData] = useState<StreakService.StreakData | null>(null);
+  const [showStreakModal, setShowStreakModal] = useState(false);
+
   // Load intake data and request permissions on mount
   useEffect(() => {
     loadIntakeData();
     requestNotificationPermissions();
     loadUserTriggers();
+    loadAndRecordStreak();
   }, []);
 
   // Check risk level and send notifications
@@ -108,6 +114,16 @@ export default function DashboardScreen() {
       console.error('Error loading user triggers:', error);
     } finally {
       setLoadingTriggers(false);
+    }
+  };
+
+  const loadAndRecordStreak = async () => {
+    try {
+      const data = await StreakService.recordAppOpen();
+      setStreakData(data);
+      console.log('📅 Streak loaded:', data);
+    } catch (error) {
+      console.error('Error loading streak:', error);
     }
   };
 
@@ -179,6 +195,10 @@ export default function DashboardScreen() {
           stress: latestData.wearable.stress,
           sleepQuality: latestData.wearable.sleepQuality,
           screenTime: latestData.phone?.screenTimeMinutes || 0,
+          pressure: latestData.weather?.weather?.pressure || 1013,
+          temperature: latestData.weather?.weather?.temperature || 20,
+          notificationCount: latestData.phone?.notificationCount || 0,
+          calendarStress: latestData.calendar?.stressScore || latestData.calendar?.load || 0,
         }];
         // Keep last 20 data points
         return newData.slice(-20);
@@ -220,7 +240,8 @@ export default function DashboardScreen() {
   };
 
   const sleepData = latestData?.sleep || {
-    totalSleepMinutes: 0,
+    totalSleepMinutes: 420, // 7 hours default
+    sleepHours: 7,
     sleepQuality: 75,
     sleepDebt: 0,
   };
@@ -238,235 +259,363 @@ export default function DashboardScreen() {
     eventsToday: 0,
     busyHoursToday: 0,
     stressScore: 0,
+    load: 0,
   };
+
+  // DEBUG: Log actual data values
+  if (useDataset && latestData) {
+    console.log('📊 Dashboard Data Check:', {
+      sleep: sleepData.sleepHours || (sleepData.totalSleepMinutes / 60),
+      screen: (phoneData.screenTimeMinutes / 60).toFixed(1),
+      pressure: weatherData.weather?.pressure,
+      calendarStress: calendarData.stressScore || calendarData.load,
+      notifications: phoneData.notificationCount,
+    });
+  }
 
   const riskLevel = currentRisk;
   const riskStatus = riskLevel < 40 ? 'Low' : riskLevel < 70 ? 'Medium' : 'High';
   const riskColor = riskLevel < 40 ? 'bg-green-500' : riskLevel < 70 ? 'bg-yellow-500' : 'bg-red-500';
 
-  // Dynamic metrics from real data
-  const metrics = [
-    { 
-      label: 'HRV', 
-      value: Math.round(wearableData.hrv).toString(), 
-      unit: 'ms', 
-      trend: wearableData.hrv < 50 ? 'down' : 'up',
-      change: wearableData.hrv < 50 ? 'Low' : 'Normal'
-    },
-    { 
-      label: 'Sleep', 
-      value: (sleepData.totalSleepMinutes / 60).toFixed(1), 
-      unit: 'hrs', 
-      trend: sleepData.totalSleepMinutes < 420 ? 'down' : 'up',
-      change: sleepData.sleepDebt > 2 ? `Debt: ${sleepData.sleepDebt.toFixed(1)}h` : 'Good'
-    },
-    { 
-      label: 'Stress', 
-      value: Math.round(wearableData.stress).toString(), 
-      unit: '%', 
-      trend: wearableData.stress > 50 ? 'up' : 'down',
-      change: wearableData.stress > 70 ? 'High' : wearableData.stress > 40 ? 'Medium' : 'Low'
-    },
-    { 
-      label: 'Screen', 
-      value: (phoneData.screenTimeMinutes / 60).toFixed(1), 
-      unit: 'hrs', 
-      trend: phoneData.screenTimeMinutes > 240 ? 'up' : 'down',
-      change: phoneData.screenTimeMinutes > 300 ? 'High' : 'Normal'
-    },
-  ];
-
-  // Calculate dynamic triggers based on user-selected triggers from onboarding + real data
-  const calculateDynamicTriggers = () => {
-    const dynamicTriggers: any[] = [];
-
-    // Core metrics (always included)
-    dynamicTriggers.push(
-      { 
-        name: 'HRV Drop', 
-        value: `${Math.round(wearableData.hrv)}ms`,
-        impact: wearableData.hrv < 40 ? 90 : wearableData.hrv < 55 ? 60 : 30,
-        active: wearableData.hrv < 55,
-        type: 'core'
-      },
-      { 
-        name: 'Sleep Quality', 
-        value: `${Math.round(sleepData.sleepDebt)}h debt`,
-        impact: Math.min(100, sleepData.sleepDebt * 20),
-        active: sleepData.sleepDebt > 2,
-        type: 'core'
-      },
-      { 
-        name: 'Stress Level', 
-        value: `${Math.round(wearableData.stress)}%`,
-        impact: wearableData.stress > 50 ? wearableData.stress : 0,
-        active: wearableData.stress > 50,
-        type: 'core'
-      },
-      { 
-        name: 'Screen Time', 
-        value: `${(phoneData.screenTimeMinutes / 60).toFixed(1)}h`,
-        impact: Math.min(100, (phoneData.screenTimeMinutes / 360) * 100),
-        active: phoneData.screenTimeMinutes > 240,
-        type: 'core'
-      }
-    );
-
-    // Add user-selected triggers from onboarding with real data
+  // Dynamic metrics from real data - SHOWS USER'S TRACKED TRIGGERS
+  const calculateMetricsCards = () => {
+    const metricsCards: any[] = [];
+    
+    // Helper function to check if value is valid
+    const isValidValue = (value: any) => {
+      return value !== undefined && value !== null && value !== '' && 
+             !isNaN(parseFloat(value.toString())) && parseFloat(value.toString()) !== 0;
+    };
+    
+    // Always show these core metrics first (only if valid)
+    if (isValidValue(wearableData.hrv)) {
+      metricsCards.push({ 
+        label: 'HRV', 
+        value: Math.round(wearableData.hrv).toString(), 
+        unit: 'ms', 
+        trend: wearableData.hrv < 50 ? 'down' : 'up',
+        change: wearableData.hrv < 50 ? 'Low' : 'Normal',
+        triggerId: 'hrv'
+      });
+    }
+    
+    if (isValidValue(sleepData.totalSleepMinutes)) {
+      metricsCards.push({ 
+        label: 'Sleep', 
+        value: (sleepData.totalSleepMinutes / 60).toFixed(1), 
+        unit: 'hrs', 
+        trend: sleepData.totalSleepMinutes < 420 ? 'down' : 'up',
+        change: sleepData.sleepDebt > 2 ? `Debt: ${sleepData.sleepDebt.toFixed(1)}h` : 'Good',
+        triggerId: 'lack_of_sleep'
+      });
+    }
+    
+    if (isValidValue(wearableData.stress)) {
+      metricsCards.push({ 
+        label: 'Stress', 
+        value: Math.round(wearableData.stress).toString(), 
+        unit: '%', 
+        trend: wearableData.stress > 50 ? 'up' : 'down',
+        change: wearableData.stress > 70 ? 'High' : wearableData.stress > 40 ? 'Medium' : 'Low',
+        triggerId: 'stress'
+      });
+    }
+    
+    // Add user-selected triggers as metric cards (only if valid)
     if (userTriggers && userTriggers.length > 0) {
-      userTriggers.forEach(triggerName => {
-        let triggerData = null;
-
-        switch (triggerName.toLowerCase()) {
-          case 'lack of sleep':
-          case 'poor sleep':
-            triggerData = {
-              name: 'Poor Sleep',
-              value: `${sleepData.sleepHours.toFixed(1)}h`,
-              impact: sleepData.sleepHours < 6 ? 85 : sleepData.sleepHours < 7 ? 60 : 30,
-              active: sleepData.sleepHours < 7,
-              type: 'user'
-            };
+      userTriggers.forEach(triggerId => {
+        // Skip if already added
+        if (metricsCards.find(m => m.triggerId === triggerId)) return;
+        
+        switch (triggerId) {
+          case 'screen_time':
+          case 'bright_light':
+            const screenMinutes = phoneData.screenTimeMinutes || 0;
+            if (screenMinutes > 0) {
+              const screenHours = (screenMinutes / 60).toFixed(1);
+              metricsCards.push({ 
+                label: 'Screen', 
+                value: screenHours, 
+                unit: 'hrs', 
+                trend: screenMinutes > 240 ? 'up' : 'down',
+                change: screenMinutes > 300 ? 'High' : 'Normal',
+                triggerId: 'screen_time'
+              });
+            }
             break;
-
-          case 'stress':
-          case 'high stress':
-            triggerData = {
-              name: 'High Stress',
-              value: `${Math.round(wearableData.stress)}%`,
-              impact: wearableData.stress,
-              active: wearableData.stress > 60,
-              type: 'user'
-            };
+          
+          case 'weather_changes':
+          case 'barometric_pressure':
+            const pressure = weatherData.weather?.pressure;
+            if (pressure && pressure !== 1013) { // Only show if not default value
+              metricsCards.push({ 
+                label: 'Pressure', 
+                value: Math.round(pressure).toString(), 
+                unit: 'hPa', 
+                trend: pressure < 1010 ? 'down' : 'up',
+                change: pressure < 1005 ? 'Very Low' : pressure < 1010 ? 'Low' : 'Normal',
+                triggerId: 'barometric_pressure'
+              });
+            }
+            const temp = weatherData.weather?.temperature;
+            if (temp && temp !== 20) { // Only show if not default value
+              metricsCards.push({ 
+                label: 'Temp', 
+                value: Math.round(temp).toString(), 
+                unit: '°C', 
+                trend: temp > 25 ? 'up' : temp < 15 ? 'down' : 'neutral',
+                change: temp > 28 || temp < 10 ? 'Extreme' : 'Normal',
+                triggerId: 'temperature'
+              });
+            }
             break;
-
-          case 'weather changes':
-          case 'barometric pressure':
-            triggerData = {
-              name: 'Weather/Pressure',
-              value: `${Math.round(weatherData.weather.pressure)} hPa`,
-              impact: weatherData.weather.pressure < 1000 ? 80 : weatherData.weather.pressure < 1010 ? 50 : 20,
-              active: weatherData.weather.pressure < 1010,
-              type: 'user'
-            };
-            break;
-
-          case 'bright lights':
-          case 'light sensitivity':
-            triggerData = {
-              name: 'Bright Light',
-              value: `UV ${weatherData.weather.uvIndex}`,
-              impact: weatherData.weather.uvIndex > 7 ? 70 : weatherData.weather.uvIndex > 5 ? 45 : 15,
-              active: weatherData.weather.uvIndex > 5,
-              type: 'user'
-            };
-            break;
-
+          
           case 'dehydration':
-          case 'not enough water':
-            triggerData = {
-              name: 'Dehydration',
-              value: `${waterIntake}/8 glasses`,
-              impact: waterIntake < 4 ? 75 : waterIntake < 6 ? 50 : 20,
-              active: waterIntake < 6,
-              type: 'user'
-            };
+            if (waterIntake > 0) {
+              metricsCards.push({ 
+                label: 'Water', 
+                value: waterIntake.toString(), 
+                unit: 'glasses', 
+                trend: waterIntake < 6 ? 'down' : 'up',
+                change: waterIntake < 4 ? 'Low' : waterIntake < 6 ? 'Moderate' : 'Good',
+                triggerId: 'dehydration'
+              });
+            }
             break;
-
+          
           case 'caffeine':
-          case 'too much caffeine':
-            triggerData = {
-              name: 'Caffeine Overload',
-              value: `${coffeeIntake} cups`,
-              impact: coffeeIntake >= 4 ? 80 : coffeeIntake >= 3 ? 55 : 25,
-              active: coffeeIntake >= 3,
-              type: 'user'
-            };
+            if (coffeeIntake > 0) {
+              metricsCards.push({ 
+                label: 'Caffeine', 
+                value: coffeeIntake.toString(), 
+                unit: 'cups', 
+                trend: coffeeIntake > 3 ? 'up' : 'down',
+                change: coffeeIntake > 4 ? 'High' : coffeeIntake > 2 ? 'Moderate' : 'Low',
+                triggerId: 'caffeine'
+              });
+            }
             break;
-
-          case 'skipping meals':
-          case 'hunger':
-            // Estimate based on calendar events (gaps > 5 hours)
-            const longGaps = calendarData.stressScore > 40;
-            triggerData = {
-              name: 'Meal Timing',
-              value: calendarData.stressScore > 50 ? 'Irregular' : 'Regular',
-              impact: longGaps ? 65 : 30,
-              active: longGaps,
-              type: 'user'
-            };
+          
+          case 'skipped_meals':
+            const calStress = calendarData.stressScore || calendarData.load || 0;
+            if (calStress > 0) {
+              metricsCards.push({ 
+                label: 'Calendar', 
+                value: Math.round(calStress).toString(), 
+                unit: '% busy', 
+                trend: calStress > 60 ? 'up' : 'down',
+                change: calStress > 75 ? 'Overload' : calStress > 50 ? 'Busy' : 'Light',
+                triggerId: 'calendar'
+              });
+            }
             break;
-
-          case 'screen time':
-          case 'excessive screen use':
-            triggerData = {
-              name: 'Excess Screen',
-              value: `${(phoneData.screenTimeMinutes / 60).toFixed(1)}h`,
-              impact: Math.min(100, (phoneData.screenTimeMinutes / 300) * 100),
-              active: phoneData.screenTimeMinutes > 300,
-              type: 'user'
-            };
+          
+          case 'loud_noises':
+            if (phoneData.notificationCount > 0) {
+              metricsCards.push({ 
+                label: 'Notifications', 
+                value: phoneData.notificationCount.toString(), 
+                unit: 'today', 
+                trend: phoneData.notificationCount > 80 ? 'up' : 'down',
+                change: phoneData.notificationCount > 100 ? 'Excessive' : phoneData.notificationCount > 60 ? 'High' : 'Normal',
+                triggerId: 'loud_noises'
+              });
+            }
             break;
-
-          case 'loud noises':
-          case 'noise':
-            // Estimate from calendar stress
-            triggerData = {
-              name: 'Noise/Activity',
-              value: `${calendarData.stressScore}% busy`,
-              impact: calendarData.stressScore,
-              active: calendarData.stressScore > 60,
-              type: 'user'
-            };
+          
+          case 'physical_activity':
+            const steps = wearableData.steps || 0;
+            if (steps > 0) {
+              metricsCards.push({ 
+                label: 'Steps', 
+                value: (steps / 1000).toFixed(1), 
+                unit: 'k', 
+                trend: steps > 5000 ? 'up' : 'down',
+                change: steps < 3000 ? 'Sedentary' : steps < 6000 ? 'Light' : 'Active',
+                triggerId: 'physical_activity'
+              });
+            }
             break;
-
-          case 'alcohol':
-            triggerData = {
-              name: 'Alcohol',
-              value: 'Tracked manually',
-              impact: 50, // Default medium risk
-              active: false,
-              type: 'user'
-            };
-            break;
-
-          case 'hormonal changes':
-          case 'menstrual cycle':
-            // This would need menstrual tracking data
-            triggerData = {
-              name: 'Hormonal',
-              value: 'Cycle tracking',
-              impact: 60,
-              active: false,
-              type: 'user'
-            };
-            break;
-
-          default:
-            // Generic trigger
-            triggerData = {
-              name: triggerName,
-              value: 'Monitoring',
-              impact: 40,
-              active: false,
-              type: 'user'
-            };
-        }
-
-        if (triggerData && !dynamicTriggers.find(t => t.name === triggerData.name)) {
-          dynamicTriggers.push(triggerData);
         }
       });
     }
-
-    // Sort by impact (highest first) and filter active ones
-    return dynamicTriggers
-      .filter(t => t.active)
-      .sort((a, b) => b.impact - a.impact)
-      .slice(0, 6); // Top 6 triggers
+    
+    // Return ALL metrics (not limited)
+    return metricsCards;
   };
 
-  const triggers = calculateDynamicTriggers();
+  const allMetrics = calculateMetricsCards();
+  const metrics = allMetrics.slice(0, 4); // Show only 4 on main screen
+  const additionalMetrics = allMetrics.slice(4); // Rest for modal/popup
+
+  // Calculate COMPREHENSIVE dynamic triggers - ALL 12+ TRIGGERS WITH VALUES
+  const calculateDynamicTriggers = () => {
+    const dynamicTriggers: any[] = [];
+
+    // 1. HRV (Heart Rate Variability) - Nervous System Stress
+    const hrvValue = Math.round(wearableData.hrv);
+    const hrvImpact = hrvValue < 40 ? 95 : hrvValue < 45 ? 85 : hrvValue < 55 ? 65 : 30;
+    dynamicTriggers.push({ 
+      name: 'HRV (Nervous System)', 
+      value: `${hrvValue}ms`,
+      impact: hrvImpact,
+      active: hrvValue < 55,
+      status: hrvValue < 40 ? 'Critical' : hrvValue < 55 ? 'Warning' : 'Normal',
+      type: 'core'
+    });
+
+    // 2. Stress & Anxiety
+    const stressValue = Math.round(wearableData.stress);
+    const stressImpact = stressValue > 75 ? 90 : stressValue > 70 ? 80 : stressValue > 50 ? 60 : 20;
+    dynamicTriggers.push({ 
+      name: 'Stress & Anxiety', 
+      value: `${stressValue}%`,
+      impact: stressImpact,
+      active: stressValue > 50,
+      status: stressValue > 75 ? 'Extreme' : stressValue > 50 ? 'High' : 'Normal',
+      type: 'core'
+    });
+
+    // 3. Sleep Duration
+    const sleepHours = sleepData.sleepHours || 7;
+    const sleepDurationImpact = sleepHours < 5 ? 85 : sleepHours < 6 ? 70 : sleepHours < 7 ? 50 : 20;
+    dynamicTriggers.push({ 
+      name: 'Sleep Duration', 
+      value: `${sleepHours.toFixed(1)}h`,
+      impact: sleepDurationImpact,
+      active: sleepHours < 7,
+      status: sleepHours < 5 ? 'Severe' : sleepHours < 6 ? 'Poor' : sleepHours < 7 ? 'Low' : 'Good',
+      type: 'core'
+    });
+
+    // 4. Sleep Quality
+    const sleepQuality = wearableData.sleepQuality || 75;
+    const sleepQualityImpact = sleepQuality < 50 ? 80 : sleepQuality < 60 ? 70 : sleepQuality < 70 ? 50 : 20;
+    dynamicTriggers.push({ 
+      name: 'Sleep Quality', 
+      value: `${Math.round(sleepQuality)}%`,
+      impact: sleepQualityImpact,
+      active: sleepQuality < 70,
+      status: sleepQuality < 50 ? 'Very Poor' : sleepQuality < 70 ? 'Poor' : 'Good',
+      type: 'core'
+    });
+
+    // 5. Screen Time / Bright Light Exposure
+    const screenMinutes = phoneData.screenTimeMinutes || 180;
+    const screenHours = (screenMinutes / 60).toFixed(1);
+    const screenImpact = screenMinutes > 420 ? 75 : screenMinutes > 350 ? 60 : screenMinutes > 280 ? 40 : 15;
+    dynamicTriggers.push({ 
+      name: 'Screen Time / Bright Light', 
+      value: `${screenHours}h`,
+      impact: screenImpact,
+      active: screenMinutes > 280,
+      status: screenMinutes > 420 ? 'Excessive' : screenMinutes > 350 ? 'High' : screenMinutes > 280 ? 'Elevated' : 'Normal',
+      type: 'environmental'
+    });
+
+    // 6. Weather / Barometric Pressure
+    const pressure = weatherData.pressure || 1013;
+    const pressureImpact = pressure < 1005 ? 75 : pressure < 1008 ? 65 : pressure < 1010 ? 45 : 10;
+    dynamicTriggers.push({ 
+      name: 'Barometric Pressure', 
+      value: `${Math.round(pressure)} hPa`,
+      impact: pressureImpact,
+      active: pressure < 1010,
+      status: pressure < 1005 ? 'Very Low' : pressure < 1010 ? 'Low' : 'Normal',
+      type: 'environmental'
+    });
+
+    // 7. Calendar Stress / Overwhelming Schedule
+    const calendarLoad = calendarData.load || 30;
+    const calendarImpact = calendarLoad > 75 ? 70 : calendarLoad > 60 ? 55 : calendarLoad > 50 ? 35 : 10;
+    dynamicTriggers.push({ 
+      name: 'Schedule Overload', 
+      value: `${Math.round(calendarLoad)}% busy`,
+      impact: calendarImpact,
+      active: calendarLoad > 50,
+      status: calendarLoad > 75 ? 'Overwhelming' : calendarLoad > 50 ? 'High' : 'Normal',
+      type: 'lifestyle'
+    });
+
+    // 8. Dehydration (water intake tracking)
+    const waterGlasses = waterIntake || 0;
+    const waterImpact = waterGlasses < 2 ? 50 : waterGlasses < 4 ? 30 : waterGlasses < 6 ? 15 : 0;
+    dynamicTriggers.push({ 
+      name: 'Dehydration Risk', 
+      value: `${waterGlasses} glasses`,
+      impact: waterImpact,
+      active: waterGlasses < 6,
+      status: waterGlasses < 2 ? 'Severe' : waterGlasses < 4 ? 'Moderate' : waterGlasses < 6 ? 'Low' : 'Hydrated',
+      type: 'lifestyle'
+    });
+
+    // 9. Caffeine Intake
+    const coffeeCups = coffeeIntake || 0;
+    const caffeineImpact = coffeeCups > 4 ? 55 : coffeeCups > 3 ? 40 : coffeeCups > 2 ? 25 : 0;
+    dynamicTriggers.push({ 
+      name: 'Caffeine Intake', 
+      value: `${coffeeCups} cups`,
+      impact: caffeineImpact,
+      active: coffeeCups > 2,
+      status: coffeeCups > 4 ? 'Excessive' : coffeeCups > 2 ? 'High' : 'Moderate',
+      type: 'dietary'
+    });
+
+    // 10. Notification Overload / Loud Noise
+    const notifications = phoneData.notificationCount || 50;
+    const notifImpact = notifications > 120 ? 50 : notifications > 80 ? 35 : notifications > 60 ? 20 : 5;
+    dynamicTriggers.push({ 
+      name: 'Notification Overload', 
+      value: `${notifications} today`,
+      impact: notifImpact,
+      active: notifications > 60,
+      status: notifications > 120 ? 'Overwhelming' : notifications > 80 ? 'High' : 'Normal',
+      type: 'environmental'
+    });
+
+    // 11. Physical Inactivity / Sedentary
+    const steps = wearableData.steps || 5000;
+    const sedentaryImpact = steps < 2000 ? 45 : steps < 4000 ? 30 : steps < 6000 ? 15 : 0;
+    dynamicTriggers.push({ 
+      name: 'Physical Inactivity', 
+      value: `${Math.round(steps / 1000)}k steps`,
+      impact: sedentaryImpact,
+      active: steps < 6000,
+      status: steps < 2000 ? 'Very Sedentary' : steps < 4000 ? 'Sedentary' : steps < 6000 ? 'Low Activity' : 'Active',
+      type: 'lifestyle'
+    });
+
+    // 12. Temperature Extreme
+    const temp = weatherData.temperature || 20;
+    const tempImpact = (temp > 28 || temp < 10) ? 35 : (temp > 25 || temp < 15) ? 20 : 5;
+    dynamicTriggers.push({ 
+      name: 'Temperature', 
+      value: `${Math.round(temp)}°C`,
+      impact: tempImpact,
+      active: temp > 25 || temp < 15,
+      status: (temp > 28 || temp < 10) ? 'Extreme' : (temp > 25 || temp < 15) ? 'Uncomfortable' : 'Comfortable',
+      type: 'environmental'
+    });
+
+    // 13. Humidity
+    const humidity = weatherData.humidity || 60;
+    const humidityImpact = (humidity > 80 || humidity < 30) ? 30 : (humidity > 70 || humidity < 40) ? 15 : 0;
+    dynamicTriggers.push({ 
+      name: 'Humidity', 
+      value: `${Math.round(humidity)}%`,
+      impact: humidityImpact,
+      active: humidity > 70 || humidity < 40,
+      status: (humidity > 80 || humidity < 30) ? 'Extreme' : (humidity > 70 || humidity < 40) ? 'Uncomfortable' : 'Normal',
+      type: 'environmental'
+    });
+
+    // Sort by impact (highest first) and return top 8 for display
+    return dynamicTriggers
+      .sort((a, b) => b.impact - a.impact)
+      .slice(0, 8); // Show top 8 triggers in dashboard
+  };
+
+  const topTriggers = latestData ? calculateDynamicTriggers() : [];
 
   // Prepare chart data
   const getChartData = () => {
@@ -512,33 +661,89 @@ export default function DashboardScreen() {
     };
   };
 
-  // Generate stacked bar chart data for Risk Index
+  // Generate stacked bar chart data for Risk Index - ALL TRACKED TRIGGERS
   const getStackedBarData = () => {
     if (historicalData.length < 2) {
       return [
-        { stacks: [{ value: 20, color: '#3B82F6' }, { value: 15, color: '#EF4444' }], label: '1' },
-        { stacks: [{ value: 25, color: '#3B82F6' }, { value: 10, color: '#EF4444' }], label: '2' },
-        { stacks: [{ value: 18, color: '#3B82F6' }, { value: 22, color: '#EF4444' }], label: '3' },
-        { stacks: [{ value: 30, color: '#3B82F6' }, { value: 12, color: '#EF4444' }], label: '4' },
+        { stacks: [{ value: 20, color: '#3B82F6' }, { value: 15, color: '#EF4444' }, { value: 10, color: '#F59E0B' }], label: '1' },
+        { stacks: [{ value: 25, color: '#3B82F6' }, { value: 10, color: '#EF4444' }, { value: 15, color: '#F59E0B' }], label: '2' },
+        { stacks: [{ value: 18, color: '#3B82F6' }, { value: 22, color: '#EF4444' }, { value: 12, color: '#F59E0B' }], label: '3' },
+        { stacks: [{ value: 30, color: '#3B82F6' }, { value: 12, color: '#EF4444' }, { value: 18, color: '#F59E0B' }], label: '4' },
       ];
     }
 
     const dataPoints = historicalData.slice(-6); // Last 6 points
     return dataPoints.map((d, i) => {
-      // Split risk into components: HRV impact (blue) and Stress impact (red/orange)
-      const hrvImpact = Math.max(0, (100 - d.hrv) / 2); // Lower HRV = higher impact
-      const stressImpact = d.stress / 2; // Higher stress = higher impact
-      const sleepImpact = Math.max(0, (100 - d.sleepQuality) / 3);
+      const stacks: { value: number; color: string }[] = [];
+      
+      console.log(`📊 Chart Bar ${i+1} data:`, {
+        hrv: d.hrv,
+        stress: d.stress,
+        sleep: d.sleepQuality,
+        screen: d.screenTime,
+        pressure: d.pressure,
+        temp: d.temperature,
+        notifs: d.notificationCount,
+        calendar: d.calendarStress
+      });
+      
+      // Core metrics (always included)
+      // 1. HRV impact (blue) - Lower HRV = higher impact
+      const hrvImpact = Math.max(0, (100 - d.hrv) / 4);
+      stacks.push({ value: Math.max(2, Math.round(hrvImpact)), color: '#3B82F6' });
+      
+      // 2. Stress impact (orange) - Higher stress = higher impact
+      const stressImpact = d.stress / 4;
+      stacks.push({ value: Math.max(2, Math.round(stressImpact)), color: '#F59E0B' });
+      
+      // 3. Sleep impact (red) - Poor sleep quality = higher impact
+      const sleepImpact = Math.max(0, (100 - d.sleepQuality) / 4);
+      stacks.push({ value: Math.max(2, Math.round(sleepImpact)), color: '#EF4444' });
+      
+      // 4. Screen time impact (purple) - ALWAYS SHOW
+      const screenImpact = Math.min(25, (d.screenTime || 0) / 15);
+      stacks.push({ value: Math.max(3, Math.round(screenImpact)), color: '#A855F7' });
+      
+      // 5. Pressure impact (cyan) - ALWAYS SHOW
+      const pressure = d.pressure || 1013;
+      const pressureImpact = pressure < 1010 ? Math.max(0, (1010 - pressure) * 2) : Math.abs(1013 - pressure) / 2;
+      stacks.push({ value: Math.max(3, Math.round(pressureImpact)), color: '#06B6D4' });
+      
+      // 6. Temperature impact (yellow) - ALWAYS SHOW
+      const temp = d.temperature || 20;
+      const tempImpact = Math.abs(temp - 20) * 1.5;
+      stacks.push({ value: Math.max(2, Math.round(tempImpact)), color: '#FCD34D' });
+      
+      // 7. Notification impact (pink) - ALWAYS SHOW
+      const notifImpact = Math.min(20, (d.notificationCount || 0) / 6);
+      stacks.push({ value: Math.max(2, Math.round(notifImpact)), color: '#EC4899' });
+      
+      // 8. Calendar stress impact (emerald) - ALWAYS SHOW
+      const calStress = d.calendarStress || 0;
+      const calImpact = calStress > 50 ? (calStress / 5) : (calStress / 10);
+      stacks.push({ value: Math.max(2, Math.round(calImpact)), color: '#10B981' });
+      
+      console.log(`📊 Chart Bar ${i+1} stacks:`, stacks.map(s => `${s.value}(${s.color})`).join(', '));
       
       return {
-        stacks: [
-          { value: Math.round(hrvImpact), color: '#3B82F6' }, // Blue for HRV
-          { value: Math.round(stressImpact), color: '#F59E0B' }, // Orange for stress
-          { value: Math.round(sleepImpact), color: '#EF4444' }, // Red for sleep
-        ],
+        stacks,
         label: `${i + 1}`,
       };
     });
+  };
+
+  // Get chart legend items - ALL METRICS
+  const getChartLegendItems = () => {
+    return [
+      { color: '#3B82F6', label: 'HRV' },
+      { color: '#F59E0B', label: 'Stress' },
+      { color: '#EF4444', label: 'Sleep' },
+      { color: '#A855F7', label: 'Screen' },
+      { color: '#06B6D4', label: 'Pressure' },
+      { color: '#FCD34D', label: 'Temp' },
+      { color: '#EC4899', label: 'Notifs' },
+      { color: '#10B981', label: 'Calendar' }
+    ];
   };
 
   // Fetch AI Analysis
@@ -559,7 +764,7 @@ export default function DashboardScreen() {
           currentRisk,
           // NEW: Include user-selected triggers and their current status
           userTriggers: userTriggers,
-          activeTriggers: triggers, // Dynamic triggers with real values
+          activeTriggers: topTriggers, // Dynamic triggers with real values
           intakeData: {
             water: waterIntake,
             coffee: coffeeIntake,
@@ -572,7 +777,9 @@ export default function DashboardScreen() {
         }
       );
 
-      if (response.data.success) {
+      console.log('🤖 AI Response:', response.data);
+
+      if (response.data.success && response.data.analysis) {
         setAiAnalysis(response.data.analysis);
         
         // Play audio if available
@@ -580,14 +787,76 @@ export default function DashboardScreen() {
           await playAudio(response.data.audio);
         }
       } else {
-        setAiAnalysis('Unable to generate insights. Please try again later.');
+        // Fallback: Generate local analysis
+        const localAnalysis = generateLocalAnalysis();
+        setAiAnalysis(localAnalysis);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI Analysis Error:', error);
-      setAiAnalysis('Failed to connect to AI service. Please check your connection.');
+      console.error('Error details:', error.response?.data);
+      
+      // Fallback: Generate local analysis instead of showing error
+      const localAnalysis = generateLocalAnalysis();
+      setAiAnalysis(localAnalysis);
     } finally {
       setLoadingAI(false);
     }
+  };
+
+  // Generate local AI-like analysis as fallback
+  const generateLocalAnalysis = () => {
+    const risk = currentRisk;
+    const hrv = wearableData.hrv;
+    const stress = wearableData.stress;
+    const sleepHours = sleepData.sleepHours || (sleepData.totalSleepMinutes / 60);
+    const pressure = weatherData.weather?.pressure || 1013;
+    
+    let analysis = `🧠 **Migraine Risk Analysis**\n\n`;
+    
+    // Risk level assessment
+    if (risk >= 70) {
+      analysis += `⚠️ **HIGH RISK ALERT** (${risk}%)\nYour migraine risk is significantly elevated. Consider taking preventive medication and reducing triggers.\n\n`;
+    } else if (risk >= 40) {
+      analysis += `🟡 **MODERATE RISK** (${risk}%)\nYour migraine risk is elevated. Monitor your symptoms and avoid known triggers.\n\n`;
+    } else {
+      analysis += `✅ **LOW RISK** (${risk}%)\nYour migraine risk is currently low. Keep up the good habits!\n\n`;
+    }
+    
+    // Key factors
+    analysis += `📊 **Key Factors:**\n\n`;
+    
+    if (hrv < 45) {
+      analysis += `• ❤️ **Low HRV (${Math.round(hrv)}ms)**: Your nervous system is under stress. Try deep breathing exercises or meditation.\n\n`;
+    }
+    
+    if (stress > 60) {
+      analysis += `• 😰 **High Stress (${Math.round(stress)}%)**: Elevated stress levels detected. Take breaks and practice relaxation techniques.\n\n`;
+    }
+    
+    if (sleepHours < 6) {
+      analysis += `• 😴 **Poor Sleep (${sleepHours.toFixed(1)}h)**: Sleep deprivation is a major migraine trigger. Aim for 7-9 hours tonight.\n\n`;
+    }
+    
+    if (pressure < 1010) {
+      analysis += `• 🌧️ **Low Pressure (${Math.round(pressure)} hPa)**: Weather changes can trigger migraines. Stay hydrated and rest if needed.\n\n`;
+    }
+    
+    if (waterIntake < 4) {
+      analysis += `• 💧 **Dehydration Risk (${waterIntake} glasses)**: Drink more water! Aim for at least 8 glasses today.\n\n`;
+    }
+    
+    if (coffeeIntake > 3) {
+      analysis += `• ☕ **High Caffeine (${coffeeIntake} cups)**: Too much caffeine can trigger migraines. Consider reducing intake.\n\n`;
+    }
+    
+    // Recommendations
+    analysis += `💡 **Recommendations:**\n\n`;
+    analysis += `1. ${risk > 60 ? 'Take preventive medication if prescribed' : 'Continue monitoring your triggers'}\n`;
+    analysis += `2. ${sleepHours < 7 ? 'Prioritize sleep tonight' : 'Maintain good sleep habits'}\n`;
+    analysis += `3. ${waterIntake < 6 ? 'Drink 3 more glasses of water' : 'Keep up hydration'}\n`;
+    analysis += `4. ${stress > 50 ? 'Practice 10 minutes of meditation' : 'Continue stress management'}\n`;
+    
+    return analysis;
   };
 
   // Play audio from base64
@@ -662,61 +931,153 @@ export default function DashboardScreen() {
       
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View className="px-6 pt-16 pb-6">
-          <Text style={{ color: colors.text }} className="text-3xl font-bold mb-2">
-            Migraine Guardian
-          </Text>
-          <Text style={{ color: colors.textSecondary }} className="text-base">
-            Thursday, November 14
+        <View className="px-6 pt-12 pb-4">
+          {/* Streak Timeline - Above Title */}
+          {streakData && (
+            <View className="flex-row justify-between items-center mb-3">
+              {StreakService.getLast7Days(streakData).map((day, index) => {
+                const date = new Date(day.date);
+                const dayNum = date.getDate();
+                const isPast = new Date(day.date) < new Date(new Date().setHours(0, 0, 0, 0));
+                const isMissed = isPast && !day.opened;
+                
+                return (
+                  <View key={index} className="items-center">
+                    <View
+                      style={{
+                        backgroundColor: day.opened 
+                          ? (day.isToday ? '#F59E0B' : '#10B981')
+                          : isMissed 
+                            ? '#EF4444'  // Red for missed days
+                            : (isDark ? '#2D2D2D' : '#E5E7EB'),
+                        borderWidth: day.isToday ? 2 : 0,
+                        borderColor: '#F59E0B',
+                      }}
+                      className="w-10 h-10 rounded-full items-center justify-center"
+                    >
+                      {day.opened || isMissed ? (
+                        <Text 
+                          style={{ color: '#FFFFFF' }} 
+                          className="text-sm font-bold"
+                        >
+                          {dayNum}
+                        </Text>
+                      ) : (
+                        <Text 
+                          style={{ color: isDark ? '#6B7280' : '#9CA3AF' }} 
+                          className="text-sm font-semibold"
+                        >
+                          {dayNum}
+                        </Text>
+                      )}
+                    </View>
+                    <Text 
+                      style={{ color: colors.textSecondary }} 
+                      className="text-xs mt-1"
+                    >
+                      {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' })[0]}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+          
+          {/* Title Row with Streak Counter */}
+          <View className="flex-row items-center justify-between mb-1">
+            <View className="flex-1">
+              <Text style={{ color: colors.text }} className="text-3xl font-bold">
+                Migraine Guardian
+              </Text>
+            </View>
+            
+            {/* Streak Counter - Top Right */}
+            {streakData && streakData.currentStreak > 0 && (
+              <TouchableOpacity
+                onPress={() => setShowStreakModal(true)}
+                style={{
+                  backgroundColor: isDark ? '#1a1a1a' : '#FFF7ED',
+                  borderWidth: 2,
+                  borderColor: '#F59E0B',
+                  shadowColor: '#F59E0B',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 4,
+                  elevation: 4,
+                }}
+                className="w-14 h-14 rounded-full items-center justify-center"
+              >
+                <Ionicons name="flame" size={22} color="#F59E0B" />
+                <Text style={{ color: '#F59E0B' }} className="text-xs font-bold">
+                  {streakData.currentStreak}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          <Text style={{ color: colors.textSecondary }} className="text-sm mb-3">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </Text>
           
-          {/* Data Source Indicator */}
-          {latestData?.wearable?.isSimulated !== false && (
-            <TouchableOpacity 
-              onPress={() => {
-                Alert.alert(
-                  "Test Data Active", 
-                  useDataset 
-                    ? "You're viewing realistic test data from a 100-entry medical dataset. Numbers change every 5 seconds to simulate real health patterns.\n\n💡 To use your real health data:\n1. Go to Settings\n2. Connect Apple Health\n3. Turn OFF 'Use Realistic Dataset'"
-                    : "You're viewing simulated health data because no real device is connected.\n\n💡 To use your real health data:\n1. Go to Settings\n2. Connect Apple Health\n3. Grant all permissions",
-                  [{ text: "Got it!" }]
-                );
-              }}
-              className="mt-4 flex-row items-center bg-blue-50 dark:bg-blue-900/20 px-3 py-2.5 rounded-lg"
-            >
-              <Ionicons name="information-circle" size={20} color="#3B82F6" />
-              <Text style={{ color: '#3B82F6' }} className="text-xs ml-2 flex-1 font-medium">
-                {useDataset 
-                  ? "📊 TEST DATA: Using realistic dataset (tap for info)" 
-                  : "🔄 DEMO MODE: Simulated data (tap to learn more)"}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* Risk Index Card */}
         <Animated.View 
           entering={FadeInDown.duration(800)}
-          className="mx-6 mb-6"
+          className="mx-6 mb-4"
         >
           <View style={{ 
             backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF',
             borderWidth: 1,
             borderColor: isDark ? '#2D2D2D' : '#E5E7EB'
-          }} className="rounded-3xl p-8">
+          }} className="rounded-3xl p-6">
             <Text style={{ 
               color: isDark ? '#9CA3AF' : '#6B7280' 
-            }} className="text-sm mb-3 tracking-wider">
+            }} className="text-xs mb-2 tracking-wider">
               MIGRAINE RISK INDEX
             </Text>
-            <View className="flex-row items-end mb-4">
-              <Text style={{ color: isDark ? '#FFFFFF' : '#1F2937' }} className="text-7xl font-bold">{riskLevel}</Text>
-              <Text style={{ color: isDark ? '#FFFFFF' : '#1F2937' }} className="text-3xl font-bold mb-2">%</Text>
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-row items-end">
+                <Text style={{ color: isDark ? '#FFFFFF' : '#1F2937' }} className="text-6xl font-bold">{riskLevel}</Text>
+                <Text style={{ color: isDark ? '#FFFFFF' : '#1F2937' }} className="text-2xl font-bold mb-1.5">%</Text>
+              </View>
+              
+              {/* Circular Migraine Phase Indicator */}
+              <View className="items-center">
+                <View style={{ position: 'relative', width: 90, height: 90 }}>
+                  <CircularProgress
+                    size={90}
+                    width={8}
+                    fill={riskLevel}
+                    tintColor={riskLevel >= 70 ? '#EF4444' : riskLevel >= 40 ? '#F59E0B' : '#10B981'}
+                    backgroundColor={isDark ? '#2D2D2D' : '#E5E7EB'}
+                    rotation={0}
+                    lineCap="round"
+                  >
+                    {() => (
+                      <View className="items-center justify-center">
+                        <Text style={{ fontSize: 24 }}>
+                          {riskLevel >= 70 ? '🔴' : riskLevel >= 40 ? '🟡' : '🟢'}
+                        </Text>
+                        <Text 
+                          style={{ 
+                            color: isDark ? '#FFFFFF' : '#1F2937',
+                            fontSize: 9,
+                            marginTop: 2,
+                          }} 
+                          className="font-bold text-center"
+                        >
+                          {riskLevel >= 70 ? 'Critical' : riskLevel >= 40 ? 'Warning' : 'Safe'}
+                        </Text>
+                      </View>
+                    )}
+                  </CircularProgress>
+                </View>
+              </View>
             </View>
-            <View className="flex-row items-center mb-6">
-              <View className={`w-3 h-3 rounded-full ${riskColor} mr-2`} />
-              <Text style={{ color: isDark ? '#D1D5DB' : '#4B5563' }} className="text-lg font-medium">{riskStatus} Risk</Text>
+            <View className="flex-row items-center mb-4">
+              <View className={`w-2.5 h-2.5 rounded-full ${riskColor} mr-2`} />
+              <Text style={{ color: isDark ? '#D1D5DB' : '#4B5563' }} className="text-base font-medium">{riskStatus} Risk</Text>
               {isCollecting && (
                 <View className="ml-auto">
                   <View className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -729,7 +1090,7 @@ export default function DashboardScreen() {
               <View style={{ 
                 borderTopWidth: 1, 
                 borderTopColor: isDark ? '#2D2D2D' : '#E5E7EB',
-                paddingTop: 16 
+                paddingTop: 12 
               }}>
                 <BarChart
                   data={getStackedBarData()}
@@ -747,23 +1108,22 @@ export default function DashboardScreen() {
                   showGradient={false}
                   rotateLabel={false}
                   width={width - 130}
-                  height={120}
+                  height={110}
                 />
                 
-                {/* Legend */}
-                <View className="flex-row justify-center mt-4 space-x-4">
-                  <View className="flex-row items-center">
-                    <View className="w-3 h-3 rounded-full bg-blue-500 mr-1" />
-                    <Text style={{ color: isDark ? '#9CA3AF' : '#6B7280' }} className="text-xs">HRV</Text>
-                  </View>
-                  <View className="flex-row items-center">
-                    <View className="w-3 h-3 rounded-full bg-orange-500 mr-1" />
-                    <Text style={{ color: isDark ? '#9CA3AF' : '#6B7280' }} className="text-xs">Stress</Text>
-                  </View>
-                  <View className="flex-row items-center">
-                    <View className="w-3 h-3 rounded-full bg-red-500 mr-1" />
-                    <Text style={{ color: isDark ? '#9CA3AF' : '#6B7280' }} className="text-xs">Sleep</Text>
-                  </View>
+                {/* Dynamic Legend - Shows ALL tracked triggers */}
+                <View className="flex-row flex-wrap justify-center mt-3 gap-2">
+                  {getChartLegendItems().map((item, index) => (
+                    <View key={index} className="flex-row items-center">
+                      <View 
+                        style={{ backgroundColor: item.color }} 
+                        className="w-2.5 h-2.5 rounded-full mr-1" 
+                      />
+                      <Text style={{ color: isDark ? '#9CA3AF' : '#6B7280' }} className="text-xs">
+                        {item.label}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
               </View>
             ) : (
@@ -783,9 +1143,9 @@ export default function DashboardScreen() {
         {/* Quick Metrics */}
         <Animated.View 
           entering={FadeInUp.duration(600).delay(200)}
-          className="px-6 mb-6"
+          className="px-6 mb-4"
         >
-          <View className="flex-row items-center justify-between mb-3">
+          <View className="flex-row items-center justify-between mb-2.5">
             <Text style={{ color: colors.text }} className="text-lg font-bold">
               Today's Metrics
             </Text>
@@ -852,9 +1212,9 @@ export default function DashboardScreen() {
                       )}
                     </CircularProgress>
                     
-                    <Text style={{ color: colors.text }} className="text-[11px] mt-2 font-semibold">{metric.label}</Text>
+                    <Text style={{ color: colors.text }} className="text-[11px] mt-1.5 font-semibold">{metric.label}</Text>
                     
-                    <View className="flex-row items-center mt-1">
+                    <View className="flex-row items-center mt-0.5">
                       <Ionicons 
                         name={metric.trend === 'down' ? 'arrow-down' : 'arrow-up'} 
                         size={10} 
@@ -877,9 +1237,9 @@ export default function DashboardScreen() {
         {/* Water & Coffee Intake */}
         <Animated.View 
           entering={FadeInUp.duration(600).delay(350)}
-          className="px-6 mb-8"
+          className="px-6 mb-4"
         >
-          <Text style={{ color: colors.text }} className="text-xl font-semibold mb-4">
+          <Text style={{ color: colors.text }} className="text-lg font-bold mb-2.5">
             Daily Intake Tracker
           </Text>
           
@@ -887,9 +1247,16 @@ export default function DashboardScreen() {
             {/* Water Intake */}
             <View className="flex-1">
               <View style={{ 
-                backgroundColor: isDark ? '#1A1A1A' : colors.card,
-                borderColor: isDark ? '#2D2D2D' : colors.border,
-              }} className="rounded-2xl p-3 border">
+                backgroundColor: isDark ? 'rgba(26, 26, 26, 0.6)' : colors.card,
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : colors.border,
+                ...(isDark && {
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 5,
+                }),
+              }} className="rounded-2xl p-3 border backdrop-blur-xl">
                 <View className="items-center mb-2">
                   <Ionicons name="water" size={28} color="#3B82F6" />
                   <Text style={{ color: colors.text }} className="text-xs font-semibold mt-1">Water</Text>
@@ -898,7 +1265,11 @@ export default function DashboardScreen() {
                 <View className="flex-row items-center justify-between mb-2">
                   <TouchableOpacity 
                     onPress={decrementWater}
-                    style={{ backgroundColor: isDark ? '#000000' : '#f3f4f6' }}
+                    style={{ 
+                      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.5)' : '#f3f4f6',
+                      borderWidth: isDark ? 1 : 0,
+                      borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                    }}
                     className="w-8 h-8 rounded-full items-center justify-center"
                   >
                     <Ionicons name="remove" size={16} color={colors.text} />
@@ -918,7 +1289,11 @@ export default function DashboardScreen() {
                   </TouchableOpacity>
                 </View>
                 
-                <View style={{ backgroundColor: isDark ? '#0F172A' : '#f0f9ff' }} className="rounded-lg p-1.5">
+                <View style={{ 
+                  backgroundColor: isDark ? 'rgba(15, 23, 42, 0.6)' : '#f0f9ff',
+                  borderWidth: isDark ? 1 : 0,
+                  borderColor: isDark ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                }} className="rounded-lg p-1.5">
                   <Text style={{ color: waterIntake >= 8 ? '#22C55E' : '#3B82F6' }} className="text-[10px] text-center font-medium">
                     {waterIntake >= 8 ? '✓ Goal!' : `Goal: 8`}
                   </Text>
@@ -929,9 +1304,15 @@ export default function DashboardScreen() {
             {/* Coffee Intake */}
             <View className="flex-1">
               <View style={{ 
-                backgroundColor: isDark ? '#1A1A1A' : colors.card,
-                borderColor: isDark ? '#2D2D2D' : colors.border,
-              }} className="rounded-2xl p-3 border">
+                backgroundColor: isDark ? 'rgba(26, 26, 26, 0.6)' : colors.card,
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : colors.border,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 8,
+              }} className="rounded-2xl p-3">
                 <View className="items-center mb-2">
                   <Ionicons name="cafe" size={28} color="#92400E" />
                   <Text style={{ color: colors.text }} className="text-xs font-semibold mt-1">Coffee</Text>
@@ -940,7 +1321,11 @@ export default function DashboardScreen() {
                 <View className="flex-row items-center justify-between mb-2">
                   <TouchableOpacity 
                     onPress={decrementCoffee}
-                    style={{ backgroundColor: isDark ? '#000000' : '#f3f4f6' }}
+                    style={{ 
+                      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.5)' : '#f3f4f6',
+                      borderWidth: isDark ? 1 : 0,
+                      borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                    }}
                     className="w-8 h-8 rounded-full items-center justify-center"
                   >
                     <Ionicons name="remove" size={16} color={colors.text} />
@@ -960,7 +1345,11 @@ export default function DashboardScreen() {
                   </TouchableOpacity>
                 </View>
                 
-                <View style={{ backgroundColor: isDark ? '#1C1917' : '#fef3c7' }} className="rounded-lg p-1.5">
+                <View style={{ 
+                  backgroundColor: isDark ? 'rgba(28, 25, 23, 0.6)' : '#fef3c7',
+                  borderWidth: isDark ? 1 : 0,
+                  borderColor: isDark ? 'rgba(146, 64, 14, 0.2)' : 'transparent',
+                }} className="rounded-lg p-1.5">
                   <Text style={{ color: coffeeIntake >= 3 ? '#EF4444' : '#92400E' }} className="text-[10px] text-center font-medium">
                     {coffeeIntake >= 3 ? '⚠️ High' : `Limit: 2-3`}
                   </Text>
@@ -986,8 +1375,8 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
           
-          {triggers.length > 0 ? (
-            triggers.map((trigger, index) => (
+          {topTriggers.length > 0 ? (
+            topTriggers.map((trigger: any, index: number) => (
               <View key={index} className="mb-4">
                 <View className="flex-row items-center justify-between mb-2">
                   <View className="flex-1">
@@ -1030,21 +1419,21 @@ export default function DashboardScreen() {
         {/* AI Tip Card */}
         <Animated.View 
           entering={FadeInDown.duration(800).delay(400)}
-          className="mx-6 mb-6"
+          className="mx-6 mb-4"
         >
           <View style={{ 
             backgroundColor: colors.card,
-          }} className="rounded-3xl p-6 border-2">
-            <View className="flex-row items-center mb-6">
-              <View style={{ backgroundColor: "black" }} className="w-12 h-12 rounded-2xl items-center justify-center mr-3">
-                <Ionicons name="sparkles" size={24} color="#fff" />
+          }} className="rounded-3xl p-4 border-2">
+            <View className="flex-row items-center mb-3">
+              <View style={{ backgroundColor: "black" }} className="w-10 h-10 rounded-2xl items-center justify-center mr-2.5">
+                <Ionicons name="sparkles" size={20} color="#fff" />
               </View>
               <View className="flex-1">
-                <Text style={{ color: colors.text }} className="text-xl font-bold">AI Insights</Text>
+                <Text style={{ color: colors.text }} className="text-lg font-bold">AI Insights</Text>
                 <Text style={{ color: colors.textSecondary }} className="text-xs">Powered by Gemini</Text>
               </View>
             </View>
-            <Text style={{ color: colors.text }} className="text-sm leading-6 mb-5">
+            <Text style={{ color: colors.text }} className="text-sm leading-5 mb-3">
               {wearableData.hrv < 45 ? 
                 `Your HRV is at ${Math.round(wearableData.hrv)}ms (low). Consider reducing stress and getting quality sleep tonight.` :
                 wearableData.stress > 70 ?
@@ -1061,17 +1450,17 @@ export default function DashboardScreen() {
               style={{ 
                 backgroundColor: 'black',
               }}
-              className="rounded-2xl py-3.5 px-6 flex-row items-center justify-center"
+              className="rounded-2xl py-3 px-5 flex-row items-center justify-center"
               activeOpacity={0.8}
             >
-              <Ionicons name="sparkles" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text className="text-white font-bold  text-base">Get Full Analysis</Text>
+              <Ionicons name="sparkles" size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text className="text-white font-bold text-sm">Get Full Analysis</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
 
         {/* Bottom Padding */}
-        <View className="h-8" />
+        <View className="h-6" />
       </ScrollView>
 
       {/* AI Recommendations Modal */}
@@ -1268,9 +1657,90 @@ export default function DashboardScreen() {
                     
                     console.log('Trigger metadata found:', trigger);
                     
-                    // Calculate a progress percentage for each trigger
-                    // Using a varied percentage for visual interest (60-95%)
-                    const percentage = 65 + (index * 7) % 30;
+                    // Calculate REAL values for each trigger based on current data
+                    let value = '...';
+                    let percentage = 0;
+                    
+                    switch (triggerId) {
+                      case 'lack_of_sleep':
+                      case 'poor_sleep':
+                        const hours = sleepData.sleepHours || (sleepData.totalSleepMinutes / 60);
+                        value = `${hours.toFixed(1)}h`;
+                        percentage = hours < 5 ? 85 : hours < 6 ? 70 : hours < 7 ? 50 : 30;
+                        break;
+                      
+                      case 'stress':
+                      case 'high_stress':
+                        value = `${Math.round(wearableData.stress)}%`;
+                        percentage = wearableData.stress;
+                        break;
+                      
+                      case 'dehydration':
+                        value = `${waterIntake} glasses`;
+                        percentage = waterIntake < 4 ? 80 : waterIntake < 6 ? 50 : 30;
+                        break;
+                      
+                      case 'caffeine':
+                        value = `${coffeeIntake} cups`;
+                        percentage = coffeeIntake > 4 ? 85 : coffeeIntake > 2 ? 60 : 30;
+                        break;
+                      
+                      case 'weather_changes':
+                      case 'barometric_pressure':
+                        const pressure = weatherData.weather?.pressure || 1013;
+                        value = `${Math.round(pressure)} hPa`;
+                        percentage = pressure < 1005 ? 85 : pressure < 1010 ? 60 : 30;
+                        break;
+                      
+                      case 'bright_light':
+                      case 'screen_time':
+                        const screenHours = (phoneData.screenTimeMinutes / 60);
+                        value = `${screenHours.toFixed(1)}h`;
+                        percentage = screenHours > 7 ? 85 : screenHours > 5 ? 60 : 30;
+                        break;
+                      
+                      case 'loud_noises':
+                        value = `${phoneData.notificationCount} notifs`;
+                        percentage = phoneData.notificationCount > 100 ? 75 : phoneData.notificationCount > 60 ? 50 : 25;
+                        break;
+                      
+                      case 'skipped_meals':
+                        const calStress = calendarData.stressScore || calendarData.load || 0;
+                        value = `${Math.round(calStress)}% busy`;
+                        percentage = calStress > 70 ? 75 : calStress > 50 ? 50 : 25;
+                        break;
+                      
+                      case 'physical_activity':
+                        const steps = wearableData.steps || 0;
+                        value = `${Math.round(steps / 1000)}k steps`;
+                        percentage = steps < 2000 ? 70 : steps < 5000 ? 45 : 25;
+                        break;
+                      
+                      case 'alcohol':
+                        value = 'Tracked';
+                        percentage = 40;
+                        break;
+                      
+                      case 'hormonal_changes':
+                        value = 'Cycle';
+                        percentage = 50;
+                        break;
+                      
+                      case 'strong_smells':
+                        value = 'Monitor';
+                        percentage = 35;
+                        break;
+                      
+                      case 'neck_tension':
+                        const hrv = wearableData.hrv || 65;
+                        value = `${Math.round(hrv)} ms`;
+                        percentage = hrv < 40 ? 85 : hrv < 55 ? 60 : 30;
+                        break;
+                      
+                      default:
+                        value = 'Active';
+                        percentage = 50;
+                    }
                     
                     return (
                       <View key={triggerId} className="w-[23%] mb-3">
@@ -1309,6 +1779,13 @@ export default function DashboardScreen() {
                           >
                             {trigger.name}
                           </Text>
+                          <Text 
+                            style={{ color: trigger.color }} 
+                            className="text-[8px] mt-0.5 font-bold text-center"
+                            numberOfLines={1}
+                          >
+                            {value}
+                          </Text>
                         </View>
                       </View>
                     );
@@ -1333,6 +1810,236 @@ export default function DashboardScreen() {
                 <Text style={{ color: isDark ? '#000000' : '#FFFFFF' }} className="text-center font-semibold">Close</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Streak Details Modal */}
+      <Modal
+        visible={showStreakModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowStreakModal(false)}
+      >
+        <View className="flex-1 bg-black/50 justify-end">
+          <View 
+            style={{ 
+              backgroundColor: isDark ? '#000000' : colors.background,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingTop: 8,
+              maxHeight: '75%',
+            }}
+            className="px-6 pb-8"
+          >
+            {/* Handle bar */}
+            <View className="items-center py-3">
+              <View style={{ backgroundColor: colors.border }} className="w-12 h-1.5 rounded-full" />
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {streakData && (
+                <>
+                  {/* Fire Icon Header */}
+                  <View className="items-center py-5">
+                    <View
+                      style={{
+                        backgroundColor: '#FFF7ED',
+                        shadowColor: '#F59E0B',
+                        shadowOffset: { width: 0, height: 8 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 12,
+                        elevation: 8,
+                      }}
+                      className="w-28 h-28 rounded-full items-center justify-center mb-4"
+                    >
+                      <Ionicons name="flame" size={64} color="#F59E0B" />
+                    </View>
+                    <Text style={{ color: colors.text }} className="text-3xl font-bold mb-2">
+                      {streakData.currentStreak} Day Streak!
+                    </Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-base text-center">
+                      {StreakService.getStreakMessage(streakData.currentStreak)}
+                    </Text>
+                  </View>
+
+                  {/* Stats Cards */}
+                  <View className="flex-row space-x-3 mb-5">
+                    <View 
+                      style={{ backgroundColor: isDark ? '#1a1a1a' : colors.surface }}
+                      className="flex-1 rounded-xl p-3.5 items-center"
+                    >
+                      <Text style={{ color: colors.textSecondary }} className="text-xs mb-1">
+                        Current
+                      </Text>
+                      <Text style={{ color: '#F59E0B' }} className="text-2xl font-bold">
+                        {streakData.currentStreak}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary }} className="text-xs">
+                        days
+                      </Text>
+                    </View>
+                    
+                    <View 
+                      style={{ backgroundColor: isDark ? '#1a1a1a' : colors.surface }}
+                      className="flex-1 rounded-xl p-4 items-center"
+                    >
+                      <Text style={{ color: colors.textSecondary }} className="text-xs mb-1">
+                        Longest
+                      </Text>
+                      <Text style={{ color: '#10B981' }} className="text-2xl font-bold">
+                        {streakData.longestStreak}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary }} className="text-xs">
+                        days
+                      </Text>
+                    </View>
+                    
+                    <View 
+                      style={{ backgroundColor: isDark ? '#1a1a1a' : colors.surface }}
+                      className="flex-1 rounded-xl p-4 items-center"
+                    >
+                      <Text style={{ color: colors.textSecondary }} className="text-xs mb-1">
+                        Total
+                      </Text>
+                      <Text style={{ color: '#3B82F6' }} className="text-2xl font-bold">
+                        {streakData.totalDays}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary }} className="text-xs">
+                        days
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Calendar View */}
+                  <View
+                    style={{ 
+                      backgroundColor: isDark ? '#1a1a1a' : colors.surface,
+                      borderWidth: 1,
+                      borderColor: isDark ? '#2D2D2D' : colors.border,
+                    }}
+                    className="rounded-xl p-4 mb-6"
+                  >
+                    <Text style={{ color: colors.text }} className="text-lg font-bold mb-4">
+                      Last 7 Days
+                    </Text>
+                    
+                    <View className="flex-row justify-between">
+                      {StreakService.getLast7Days(streakData).map((day, index) => (
+                        <View key={index} className="items-center">
+                          <Text 
+                            style={{ color: colors.textSecondary }} 
+                            className="text-xs mb-2"
+                          >
+                            {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' })}
+                          </Text>
+                          <View
+                            style={{
+                              backgroundColor: day.opened 
+                                ? (day.isToday ? '#F59E0B' : '#10B981')
+                                : (isDark ? '#2D2D2D' : '#E5E7EB'),
+                              borderWidth: day.isToday ? 3 : 0,
+                              borderColor: '#F59E0B',
+                            }}
+                            className="w-12 h-12 rounded-full items-center justify-center"
+                          >
+                            {day.opened ? (
+                              <Ionicons name="checkmark" size={24} color="#FFFFFF" />
+                            ) : (
+                              <Text style={{ color: colors.textSecondary }} className="text-xl">•</Text>
+                            )}
+                          </View>
+                          <Text 
+                            style={{ color: colors.textSecondary }} 
+                            className="text-xs mt-1"
+                          >
+                            {new Date(day.date).getDate()}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Benefits */}
+                  <View
+                    style={{ 
+                      backgroundColor: isDark ? '#1a1a1a' : '#EFF6FF',
+                      borderLeftWidth: 4,
+                      borderLeftColor: '#3B82F6',
+                    }}
+                    className="rounded-xl p-4 mb-4"
+                  >
+                    <View className="flex-row items-center mb-2">
+                      <Ionicons name="information-circle" size={20} color="#3B82F6" />
+                      <Text 
+                        style={{ color: isDark ? colors.text : '#1E40AF' }} 
+                        className="text-sm font-semibold ml-2"
+                      >
+                        Why Track Daily?
+                      </Text>
+                    </View>
+                    <Text 
+                      style={{ color: isDark ? colors.textSecondary : '#3B82F6' }} 
+                      className="text-xs leading-5"
+                    >
+                      Daily monitoring helps our AI learn your unique patterns better. The more data we collect, the more accurate migraine predictions become!
+                    </Text>
+                  </View>
+
+                  {/* Milestones */}
+                  <View className="mb-6">
+                    <Text style={{ color: colors.text }} className="text-lg font-bold mb-3">
+                      Milestones
+                    </Text>
+                    {[
+                      { days: 3, emoji: '🌟', title: 'Getting Started', unlocked: streakData.longestStreak >= 3 },
+                      { days: 7, emoji: '⭐', title: 'One Week Strong', unlocked: streakData.longestStreak >= 7 },
+                      { days: 14, emoji: '💫', title: 'Two Weeks Champion', unlocked: streakData.longestStreak >= 14 },
+                      { days: 30, emoji: '🏆', title: 'Monthly Master', unlocked: streakData.longestStreak >= 30 },
+                    ].map((milestone, index) => (
+                      <View
+                        key={index}
+                        style={{
+                          backgroundColor: milestone.unlocked 
+                            ? (isDark ? '#1a1a1a' : colors.surface)
+                            : (isDark ? '#0a0a0a' : '#F3F4F6'),
+                          opacity: milestone.unlocked ? 1 : 0.5,
+                          borderWidth: 1,
+                          borderColor: milestone.unlocked 
+                            ? (isDark ? '#2D2D2D' : colors.border)
+                            : 'transparent',
+                        }}
+                        className="rounded-lg p-3 flex-row items-center mb-2"
+                      >
+                        <Text className="text-2xl mr-3">{milestone.emoji}</Text>
+                        <View className="flex-1">
+                          <Text style={{ color: colors.text }} className="text-sm font-semibold">
+                            {milestone.title}
+                          </Text>
+                          <Text style={{ color: colors.textSecondary }} className="text-xs">
+                            {milestone.days} days streak
+                          </Text>
+                        </View>
+                        {milestone.unlocked && (
+                          <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              onPress={() => setShowStreakModal(false)}
+              style={{ backgroundColor: '#F59E0B' }}
+              className="rounded-full py-4 mt-4"
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: '#FFFFFF' }} className="text-center font-semibold text-base">
+                Keep Going! 🔥
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

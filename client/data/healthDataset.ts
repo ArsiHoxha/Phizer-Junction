@@ -32,6 +32,7 @@ export interface HealthDataPoint {
   
   // Profile
   migraineRisk: number; // 0-100 calculated risk
+  activeTriggers: string[]; // List of active triggers detected
   hasMigraine: boolean; // Whether this led to a migraine
 }
 
@@ -40,15 +41,16 @@ function generateRealisticDataset(): HealthDataPoint[] {
   const dataset: HealthDataPoint[] = [];
   const baseDate = new Date('2025-10-01T00:00:00');
   
+  // HACKATHON MODE: Start with high-risk stress weeks for demo
   // Generate data for ~33 days, 3 readings per day = ~100 entries
   for (let day = 0; day < 34; day++) {
     // Simulate weekly patterns and migraine cycles
     const dayOfWeek = day % 7;
     const weekNumber = Math.floor(day / 7);
     
-    // Pattern variables
+    // Pattern variables - BOOSTED FOR DEMO
     const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
-    const isStressWeek = weekNumber % 3 === 2; // Every 3rd week is stressful
+    const isStressWeek = day < 14 || weekNumber % 2 === 1; // FIRST 2 WEEKS + every other week = MORE HIGH RISK
     const weatherCycleDays = Math.sin(day * 0.2) * 10; // Weather pressure cycles
     
     // Morning reading (8 AM)
@@ -157,17 +159,17 @@ function generateDataPoint(id: number, timestamp: Date, context: any): HealthDat
     activityLevel = 'Light';
   }
   
-  // Stress week pattern (buildup to migraine)
+  // Stress week pattern (buildup to migraine) - ENHANCED FOR DEMO
   if (isStressWeek) {
-    stress += 25;
-    calendarEvents += 3;
-    calendarStress += 30;
-    sleepQuality -= 15;
-    sleepHours -= 1.2;
-    hrv -= 18;
-    heartRate += 12;
-    screenTimeMinutes += 120;
-    notificationCount += 40;
+    stress += 35; // Was 25
+    calendarEvents += 4; // Was 3
+    calendarStress += 40; // Was 30
+    sleepQuality -= 25; // Was 15
+    sleepHours -= 1.8; // Was 1.2
+    hrv -= 25; // Was 18
+    heartRate += 18; // Was 12
+    screenTimeMinutes += 180; // Was 120
+    notificationCount += 60; // Was 40
     activityLevel = 'Sedentary';
   }
   
@@ -183,21 +185,132 @@ function generateDataPoint(id: number, timestamp: Date, context: any): HealthDat
     hrv -= 5;
   }
   
-  // Calculate migraine risk (BOOSTED FOR DEMO - more dramatic)
+  // Calculate migraine risk - COMPREHENSIVE TRIGGER ANALYSIS
   let migraineRisk = 0;
-  if (hrv < 45) migraineRisk += 35; // Was 30
-  else if (hrv < 55) migraineRisk += 20; // Was 15
+  let activeTriggers: string[] = [];
   
-  if (stress > 70) migraineRisk += 30; // Was 25
-  else if (stress > 50) migraineRisk += 18; // Was 12
+  // 1. HRV (Heart Rate Variability) - Nervous system stress
+  if (hrv < 40) {
+    migraineRisk += 40;
+    activeTriggers.push('Critical HRV');
+  } else if (hrv < 45) {
+    migraineRisk += 35;
+    activeTriggers.push('Very Low HRV');
+  } else if (hrv < 55) {
+    migraineRisk += 20;
+    activeTriggers.push('Low HRV');
+  }
   
-  if (sleepQuality < 60) migraineRisk += 25; // Was 20
-  else if (sleepQuality < 70) migraineRisk += 15; // Was 10
+  // 2. Stress & Anxiety
+  if (stress > 75) {
+    migraineRisk += 35;
+    activeTriggers.push('Extreme Stress');
+  } else if (stress > 70) {
+    migraineRisk += 30;
+    activeTriggers.push('High Stress');
+  } else if (stress > 50) {
+    migraineRisk += 18;
+    activeTriggers.push('Elevated Stress');
+  }
   
-  if (pressure < 1008) migraineRisk += 18; // Was 15
-  else if (pressure < 1010) migraineRisk += 12; // Was 8
+  // 3. Poor Sleep
+  if (sleepHours < 5) {
+    migraineRisk += 30;
+    activeTriggers.push('Severe Sleep Deprivation');
+  } else if (sleepHours < 6) {
+    migraineRisk += 20;
+    activeTriggers.push('Sleep Deprivation');
+  }
   
-  if (screenTimeMinutes > 350) migraineRisk += 15; // Was 10
+  if (sleepQuality < 50) {
+    migraineRisk += 30;
+    activeTriggers.push('Very Poor Sleep Quality');
+  } else if (sleepQuality < 60) {
+    migraineRisk += 25;
+    activeTriggers.push('Poor Sleep Quality');
+  } else if (sleepQuality < 70) {
+    migraineRisk += 15;
+    activeTriggers.push('Suboptimal Sleep');
+  }
+  
+  // 4. Weather Changes (Barometric Pressure)
+  if (pressure < 1005) {
+    migraineRisk += 25;
+    activeTriggers.push('Very Low Pressure');
+  } else if (pressure < 1008) {
+    migraineRisk += 18;
+    activeTriggers.push('Low Pressure');
+  } else if (pressure < 1010) {
+    migraineRisk += 12;
+    activeTriggers.push('Dropping Pressure');
+  }
+  
+  // 5. Screen Time / Bright Light
+  if (screenTimeMinutes > 420) {
+    migraineRisk += 25;
+    activeTriggers.push('Excessive Screen Time');
+  } else if (screenTimeMinutes > 350) {
+    migraineRisk += 15;
+    activeTriggers.push('High Screen Time');
+  } else if (screenTimeMinutes > 280) {
+    migraineRisk += 8;
+    activeTriggers.push('Elevated Screen Time');
+  }
+  
+  // 6. Dehydration (inferred from activity + time)
+  const isLikelyDehydrated = (activityLevel === 'Moderate') && timeOfDay === 'afternoon';
+  if (isLikelyDehydrated) {
+    migraineRisk += 12;
+    activeTriggers.push('Possible Dehydration');
+  }
+  
+  // 7. Loud Noise / Overstimulation (high notification count)
+  if (notificationCount > 120) {
+    migraineRisk += 15;
+    activeTriggers.push('Notification Overload');
+  } else if (notificationCount > 80) {
+    migraineRisk += 10;
+    activeTriggers.push('High Notifications');
+  }
+  
+  // 8. Calendar Stress (busy schedule)
+  if (calendarStress > 75) {
+    migraineRisk += 20;
+    activeTriggers.push('Overwhelming Schedule');
+  } else if (calendarStress > 60) {
+    migraineRisk += 15;
+    activeTriggers.push('High Schedule Pressure');
+  }
+  
+  // 9. Skipped Meals (inferred from low activity + time gaps)
+  const likelySkippedMeal = timeOfDay === 'afternoon' && activityLevel === 'Sedentary' && calendarEvents > 5;
+  if (likelySkippedMeal) {
+    migraineRisk += 18;
+    activeTriggers.push('Likely Skipped Meal');
+  }
+  
+  // 10. Physical Inactivity / Neck Tension
+  if (activityLevel === 'Sedentary' && screenTimeMinutes > 300) {
+    migraineRisk += 12;
+    activeTriggers.push('Sedentary + Screen Combo');
+  }
+  
+  // 11. Extreme Temperature/Humidity
+  if (humidity > 80 || humidity < 30) {
+    migraineRisk += 10;
+    activeTriggers.push('Extreme Humidity');
+  }
+  
+  if (temperature > 28 || temperature < 10) {
+    migraineRisk += 8;
+    activeTriggers.push('Temperature Extreme');
+  }
+  
+  // 12. High UV Index (bright light trigger)
+  if (uvIndex > 7) {
+    migraineRisk += 10;
+    activeTriggers.push('High UV/Bright Sun');
+  }
   
   migraineRisk = Math.min(100, migraineRisk);
   
@@ -229,6 +342,7 @@ function generateDataPoint(id: number, timestamp: Date, context: any): HealthDat
     calendarEvents: Math.max(0, Math.min(12, calendarEvents)),
     calendarStress: Math.max(0, Math.min(100, calendarStress)),
     migraineRisk: Math.round(migraineRisk),
+    activeTriggers, // Include list of detected triggers
     hasMigraine,
   };
 }

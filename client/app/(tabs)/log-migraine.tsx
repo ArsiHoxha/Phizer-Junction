@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Animated, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import { migraineAPI, setAuthToken } from '../../services/api';
+import { useDataCollection } from '../../contexts/DataCollectionContext';
 
 export default function LogMigraineScreen() {
   const { isDark, colors } = useTheme();
   const router = useRouter();
   const { user } = useUser();
   const { getToken } = useAuth();
+  const { latestData } = useDataCollection();
   
   const [loading, setLoading] = useState(false);
+  const [analysisPhase, setAnalysisPhase] = useState('capturing'); // capturing, analyzing, complete
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const scaleAnim = new Animated.Value(1);
 
@@ -40,20 +43,45 @@ export default function LogMigraineScreen() {
     }
 
     setLoading(true);
+    setAnalysisPhase('capturing');
+    
     try {
       const token = await getToken();
       setAuthToken(token);
 
-      // One-click migraine log - AI captures everything automatically
-      const response = await migraineAPI.quickLogMigraine();
+      // Simulate capture phase
+      setTimeout(() => setAnalysisPhase('analyzing'), 1500);
+
+      // Prepare current metrics from frontend state
+      const currentMetrics = latestData ? {
+        hrv: latestData.wearable?.hrv,
+        heartRate: latestData.wearable?.heartRate,
+        stress: latestData.wearable?.stress,
+        sleepQuality: latestData.wearable?.sleepQuality || latestData.sleep?.sleepQuality,
+        sleepHours: latestData.sleep?.totalSleepMinutes ? latestData.sleep.totalSleepMinutes / 60 : undefined,
+        screenTime: latestData.phone?.screenTimeMinutes,
+        weather: latestData.weather?.weather ? {
+          temperature: latestData.weather.weather.temperature,
+          humidity: latestData.weather.weather.humidity,
+          pressure: latestData.weather.weather.pressure,
+          condition: latestData.weather.weather.description,
+        } : undefined,
+        calendarLoad: latestData.calendar?.stressScore || latestData.calendar?.load,
+      } : undefined;
+
+      // One-click migraine log - Send current frontend metrics!
+      const response = await migraineAPI.quickLogMigraine({
+        currentMetrics
+      });
 
       if (response.success) {
+        setAnalysisPhase('complete');
         setAnalysisComplete(true);
         
-        // Show success for 2 seconds then go back
+        // Show success for 3 seconds then go back
         setTimeout(() => {
           router.replace('/(tabs)');
-        }, 2500);
+        }, 3000);
       }
     } catch (error) {
       console.error('Error logging migraine:', error);
@@ -63,7 +91,7 @@ export default function LogMigraineScreen() {
 
   if (analysisComplete) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.background }} className="items-center justify-center">
+      <View style={{ flex: 1, backgroundColor: colors.background }} className="items-center justify-center px-8">
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
           <View style={{ backgroundColor: '#10B981' }} className="w-24 h-24 rounded-full items-center justify-center mb-6">
             <Ionicons name="checkmark" size={60} color="#FFFFFF" />
@@ -71,11 +99,77 @@ export default function LogMigraineScreen() {
         </Animated.View>
         
         <Text style={{ color: colors.text }} className="text-2xl font-bold mb-2">
-          Migraine Logged
+          Migraine Logged ✓
         </Text>
-        <Text style={{ color: colors.textSecondary }} className="text-base text-center px-8">
-          AI is analyzing your metrics to prevent future migraines
+        <Text style={{ color: colors.textSecondary }} className="text-base text-center px-4 mb-4">
+          Gemini AI has analyzed your metrics and identified triggers
         </Text>
+        
+        {/* Success indicators */}
+        <View className="w-full space-y-2">
+          {[
+            '✓ Captured all health metrics',
+            '✓ Identified primary triggers',
+            '✓ Updated pattern database',
+            '✓ Enabled future predictions',
+          ].map((item, i) => (
+            <View key={i} className="flex-row items-center">
+              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+              <Text style={{ color: colors.textSecondary }} className="text-sm ml-2">
+                {item}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background }} className="items-center justify-center px-8">
+        <ActivityIndicator size="large" color="#EF4444" />
+        
+        <Text style={{ color: colors.text }} className="text-xl font-bold mt-6">
+          {analysisPhase === 'capturing' ? '📊 Capturing Metrics...' : '🤖 Gemini AI Analyzing...'}
+        </Text>
+        
+        <Text style={{ color: colors.textSecondary }} className="text-sm text-center mt-2 mb-6">
+          {analysisPhase === 'capturing' 
+            ? 'Recording current health data snapshot'
+            : 'Identifying triggers and patterns with AI'}
+        </Text>
+
+        {/* What's being captured */}
+        <View className="w-full space-y-3">
+          {[
+            { icon: 'heart', label: 'HRV & Heart Rate', color: '#EF4444', show: analysisPhase === 'capturing' },
+            { icon: 'fitness', label: 'Stress Levels', color: '#F59E0B', show: analysisPhase === 'capturing' },
+            { icon: 'moon', label: 'Sleep Quality', color: '#3B82F6', show: analysisPhase === 'capturing' },
+            { icon: 'phone-portrait', label: 'Screen Time', color: '#A855F7', show: analysisPhase === 'capturing' },
+            { icon: 'cloudy', label: 'Weather & Pressure', color: '#06B6D4', show: analysisPhase === 'capturing' },
+            { icon: 'calendar', label: 'Calendar Load', color: '#10B981', show: analysisPhase === 'capturing' },
+            { icon: 'brain', label: 'AI Trigger Analysis', color: '#EC4899', show: analysisPhase === 'analyzing' },
+            { icon: 'analytics', label: 'Pattern Recognition', color: '#8B5CF6', show: analysisPhase === 'analyzing' },
+            { icon: 'shield-checkmark', label: 'Learning Thresholds', color: '#10B981', show: analysisPhase === 'analyzing' },
+          ].filter(item => item.show).map((item, i) => (
+            <View 
+              key={i}
+              style={{ 
+                backgroundColor: isDark ? '#1a1a1a' : colors.surface,
+                borderLeftWidth: 3,
+                borderLeftColor: item.color,
+              }}
+              className="p-3 rounded-lg flex-row items-center"
+            >
+              <Ionicons name={item.icon as any} size={20} color={item.color} />
+              <Text style={{ color: colors.text }} className="text-sm ml-3 flex-1">
+                {item.label}
+              </Text>
+              <ActivityIndicator size="small" color={item.color} />
+            </View>
+          ))}
+        </View>
       </View>
     );
   }

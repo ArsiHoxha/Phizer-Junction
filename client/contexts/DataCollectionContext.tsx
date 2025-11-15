@@ -137,18 +137,22 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   /**
-   * Check risk and automatically send notifications
+   * Check risk and automatically send notifications (AGGRESSIVE FOR DEMO)
    */
   const checkAndNotify = async (risk: number) => {
     try {
-      // Only notify if risk has significantly changed (by 10+ points) or crossed important thresholds
+      // HACKATHON MODE: More aggressive - notify on smaller changes
       const riskDifference = Math.abs(risk - lastNotifiedRisk.current);
       const crossedThreshold = 
         (lastNotifiedRisk.current < 30 && risk >= 30) ||
+        (lastNotifiedRisk.current < 40 && risk >= 40) ||
         (lastNotifiedRisk.current < 50 && risk >= 50) ||
+        (lastNotifiedRisk.current < 60 && risk >= 60) ||
         (lastNotifiedRisk.current < 70 && risk >= 70);
 
-      if (riskDifference >= 10 || crossedThreshold) {
+      // Notify if risk changed by 5+ points OR crossed any threshold
+      if (riskDifference >= 5 || crossedThreshold || risk >= 30) {
+        console.log(`🚨 Triggering notification - Risk: ${risk}%, Last: ${lastNotifiedRisk.current}%, Diff: ${riskDifference}`);
         await NotificationService.checkAndNotifyRiskLevel(risk);
         lastNotifiedRisk.current = risk;
         await AsyncStorage.setItem(NOTIFIED_RISK_LEVELS_KEY, risk.toString());
@@ -288,6 +292,10 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
         const datasetService = getDatasetService();
         const dataPoint = datasetService.getCurrent();
         data = datasetService.toPhoneData(dataPoint);
+        console.log('📱 Phone Data from Dataset:', {
+          screenTime: (data.screenTimeMinutes / 60).toFixed(1) + 'h',
+          notifications: data.notificationCount
+        });
       } else {
         // Use collector
         const collector = getPhoneDataCollector();
@@ -323,6 +331,11 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
         const datasetService = getDatasetService();
         const dataPoint = datasetService.getCurrent();
         data = datasetService.toWeatherData(dataPoint);
+        console.log('🌤️ Weather Data from Dataset:', {
+          temp: data.weather.temperature + '°C',
+          pressure: data.weather.pressure + 'hPa',
+          humidity: data.weather.humidity + '%'
+        });
       } else {
         // Use collector
         const collector = getLocationWeatherCollector();
@@ -347,8 +360,19 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
    */
   const collectSleepData = async () => {
     try {
-      const tracker = getSleepTracker();
-      const data = tracker.collectData();
+      let data: any;
+
+      if (useDataset) {
+        // Use dataset
+        const datasetService = getDatasetService();
+        const dataPoint = datasetService.getCurrent();
+        data = datasetService.toSleepData(dataPoint);
+        console.log('💤 Sleep Data from Dataset:', data.sleepHours, 'hours');
+      } else {
+        // Use sleep tracker
+        const tracker = getSleepTracker();
+        data = tracker.collectData();
+      }
       
       const updatedData = { ...latestData, sleep: data };
       setLatestData(updatedData);
@@ -426,24 +450,44 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
     await NotificationService.requestPermissions();
     await NotificationService.enableNotifications();
     
-    // Start wearable data collection (every 5 seconds)
-    wearableInterval.current = setInterval(collectWearableData, 5000);
-    
-    // Start phone data collection (every 10 minutes)
-    phoneInterval.current = setInterval(collectPhoneData, 10 * 60 * 1000);
-    collectPhoneData(); // Collect immediately
-    
-    // Start weather data collection (every hour)
-    weatherInterval.current = setInterval(collectWeatherData, 60 * 60 * 1000);
-    collectWeatherData(); // Collect immediately
-    
-    // Start sleep tracking (every 30 minutes)
-    sleepInterval.current = setInterval(collectSleepData, 30 * 60 * 1000);
-    collectSleepData(); // Collect immediately
-    
-    // Start calendar data collection (every 30 minutes)
-    calendarInterval.current = setInterval(collectCalendarData, 30 * 60 * 1000);
-    collectCalendarData(); // Collect immediately
+    // HACKATHON DEMO MODE: Update ALL data every 5 seconds when using dataset
+    if (useDataset) {
+      // In demo mode, all data updates together
+      wearableInterval.current = setInterval(() => {
+        collectWearableData();
+        collectPhoneData();
+        collectWeatherData();
+        collectSleepData();
+        collectCalendarData();
+      }, 5000);
+      
+      // Collect all data immediately
+      collectWearableData();
+      collectPhoneData();
+      collectWeatherData();
+      collectSleepData();
+      collectCalendarData();
+    } else {
+      // Production mode: Normal intervals
+      // Start wearable data collection (every 5 seconds)
+      wearableInterval.current = setInterval(collectWearableData, 5000);
+      
+      // Start phone data collection (every 10 minutes)
+      phoneInterval.current = setInterval(collectPhoneData, 10 * 60 * 1000);
+      collectPhoneData(); // Collect immediately
+      
+      // Start weather data collection (every hour)
+      weatherInterval.current = setInterval(collectWeatherData, 60 * 60 * 1000);
+      collectWeatherData(); // Collect immediately
+      
+      // Start sleep tracking (every 30 minutes)
+      sleepInterval.current = setInterval(collectSleepData, 30 * 60 * 1000);
+      collectSleepData(); // Collect immediately
+      
+      // Start calendar data collection (every 30 minutes)
+      calendarInterval.current = setInterval(collectCalendarData, 30 * 60 * 1000);
+      collectCalendarData(); // Collect immediately
+    }
     
     console.log('✅ Data collection started');
   };
