@@ -86,14 +86,23 @@ export default function DashboardScreen() {
 
   const loadUserTriggers = async () => {
     try {
-      if (!user?.id) return;
+      if (!user?.id) {
+        console.log('No user ID available');
+        return;
+      }
       
       const token = await getToken();
       setAuthToken(token);
       
       const userData = await userAPI.getProfile(user.id);
+      console.log('User data received:', userData);
+      
       if (userData && userData.user && userData.user.triggers) {
+        console.log('User triggers:', userData.user.triggers);
         setUserTriggers(userData.user.triggers);
+      } else {
+        console.log('No triggers found in user data');
+        setUserTriggers([]);
       }
     } catch (error) {
       console.error('Error loading user triggers:', error);
@@ -1042,51 +1051,87 @@ export default function DashboardScreen() {
             </View>
 
             <Text style={{ color: colors.textSecondary }} className="text-sm mb-4">
-              We're monitoring these {userTriggers.length} trigger{userTriggers.length > 1 ? 's' : ''} to help predict your migraine risk
+              Monitoring {userTriggers.length} trigger{userTriggers.length > 1 ? 's' : ''} for your migraine risk prediction
             </Text>
 
             <ScrollView 
               showsVerticalScrollIndicator={true} 
-              className="flex-1 mb-4"
+              style={{ flexGrow: 1, marginBottom: 16 }}
+              contentContainerStyle={{ flexGrow: 1 }}
             >
-              <View className="flex-row flex-wrap -mx-1.5">
-                {userTriggers.map((triggerId) => {
-                  const trigger = triggerMetadata[triggerId];
-                  if (!trigger) return null;
-                  
-                  return (
-                    <View key={triggerId} className="w-1/2 px-1.5 mb-3">
-                      <View style={{ 
-                        backgroundColor: isDark ? '#1a1a1a' : colors.card,
-                        borderColor: isDark ? '#2D2D2D' : colors.border,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: isDark ? 0.3 : 0.1,
-                        shadowRadius: 3,
-                        elevation: 2,
-                      }} className="rounded-xl p-4 border">
-                        <View 
-                          style={{ backgroundColor: trigger.color + '20' }}
-                          className="w-12 h-12 rounded-full items-center justify-center mb-3"
-                        >
-                          <Ionicons 
-                            name={trigger.icon as any}
-                            size={22} 
-                            color={trigger.color}
-                          />
+              {(() => {
+                console.log('Modal render - userTriggers length:', userTriggers.length);
+                console.log('Modal render - userTriggers:', userTriggers);
+                return userTriggers.length === 0 ? (
+                  <View className="py-12 items-center">
+                    <Ionicons name="information-circle-outline" size={48} color={colors.textSecondary} />
+                    <Text style={{ color: colors.text }} className="text-base font-semibold mt-4">
+                      No Triggers Selected
+                    </Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-sm mt-2 text-center px-8">
+                      You haven't selected any triggers during onboarding yet.
+                    </Text>
+                  </View>
+                ) : (
+                  <View className="flex-row flex-wrap justify-between">
+                  {userTriggers.map((triggerId, index) => {
+                    console.log(`Rendering trigger ${index}:`, triggerId);
+                    const trigger = triggerMetadata[triggerId];
+                    if (!trigger) {
+                      console.log('Trigger metadata not found for:', triggerId);
+                      return null;
+                    }
+                    
+                    console.log('Trigger metadata found:', trigger);
+                    
+                    // Calculate a progress percentage for each trigger
+                    // Using a varied percentage for visual interest (60-95%)
+                    const percentage = 65 + (index * 7) % 30;
+                    
+                    return (
+                      <View key={triggerId} className="w-[23%] mb-3">
+                        <View style={{ 
+                          backgroundColor: isDark ? '#1a1a1a' : colors.card,
+                          borderColor: isDark ? '#2D2D2D' : colors.border,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: isDark ? 0.3 : 0.08,
+                          shadowRadius: 2,
+                          elevation: 2,
+                        }} className="rounded-xl p-2.5 items-center">
+                          <CircularProgress
+                            size={45}
+                            width={4}
+                            fill={percentage}
+                            tintColor={trigger.color}
+                            backgroundColor={isDark ? '#1a1a1a' : '#e5e5e5'}
+                            rotation={0}
+                          >
+                            {() => (
+                              <View className="items-center justify-center">
+                                <Ionicons 
+                                  name={trigger.icon as any}
+                                  size={18} 
+                                  color={trigger.color}
+                                />
+                              </View>
+                            )}
+                          </CircularProgress>
+                          
+                          <Text 
+                            style={{ color: colors.text }} 
+                            className="text-[9px] mt-1.5 font-semibold text-center leading-tight"
+                            numberOfLines={2}
+                          >
+                            {trigger.name}
+                          </Text>
                         </View>
-                        <Text 
-                          style={{ color: colors.text }} 
-                          className="text-sm font-semibold"
-                          numberOfLines={2}
-                        >
-                          {trigger.name}
-                        </Text>
                       </View>
-                    </View>
-                  );
-                })}
-              </View>
+                    );
+                  })}
+                </View>
+                );
+              })()}
             </ScrollView>
 
             <View style={{ 

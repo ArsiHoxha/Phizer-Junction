@@ -91,4 +91,27 @@ export const riskAPI = {
   },
 };
 
+// Migraine Log API
+export const migraineAPI = {
+  quickLogMigraine: async () => {
+    const response = await api.post('/migraine/quick-log');
+    return response.data;
+  },
+  
+  logMigraine: async (data: { severity: number; symptoms: string[]; notes: string }) => {
+    const response = await api.post('/migraine/log', data);
+    return response.data;
+  },
+  
+  getMigraineLogs: async (clerkId: string, days: number = 30) => {
+    const response = await api.get(`/migraine/${clerkId}`, { params: { days } });
+    return response.data;
+  },
+  
+  getAIAnalysis: async (migraineId: string) => {
+    const response = await api.get(`/migraine/${migraineId}/analysis`);
+    return response.data;
+  },
+};
+
 export default api;
