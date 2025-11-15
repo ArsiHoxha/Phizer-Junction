@@ -158,7 +158,6 @@ class DatasetService {
         start: HEALTH_DATASET[0].timestamp,
         end: HEALTH_DATASET[HEALTH_DATASET.length - 1].timestamp,
       },
-      migraineCount: HEALTH_DATASET.filter(d => d.hasMigraine).length,
     };
   }
 
@@ -256,19 +255,22 @@ class DatasetService {
   }
 
   /**
-   * Check if current data point indicates a migraine
+   * Get migraine risk - Will be calculated by Gemini AI 2.5-flash-lite
+   * For now, return 0 as placeholder
    */
-  public hasMigraineTrigger(): boolean {
-    const current = this.getCurrent();
-    return current.hasMigraine;
+  public getCurrentRisk(): number {
+    // TODO: Integrate Gemini AI 2.5-flash-lite to calculate intelligent risk
+    // Based on all current metrics, historical patterns, and medical knowledge
+    return 0;
   }
 
   /**
-   * Get migraine risk from current data point
+   * Check if current data point indicates migraine trigger
+   * Will be replaced by Gemini AI analysis
    */
-  public getCurrentRisk(): number {
-    const current = this.getCurrent();
-    return current.migraineRisk;
+  public hasMigraineTrigger(): boolean {
+    // TODO: Use Gemini AI to determine if conditions indicate migraine
+    return false;
   }
 }
 

@@ -1406,7 +1406,10 @@ async function performAIAnalysisAndLearn(migraineId, clerkId) {
     };
 
     // Extract key triggers from Gemini analysis (parse AI insights)
-    const aiText = geminiAnalysis.toLowerCase();
+    // Handle both string response and object response from Gemini
+    const aiText = typeof geminiAnalysis === 'string' 
+      ? geminiAnalysis.toLowerCase() 
+      : (geminiAnalysis?.analysis || '').toLowerCase();
     let totalWeight = 0;
 
     // Parse Gemini's insights to identify primary causes

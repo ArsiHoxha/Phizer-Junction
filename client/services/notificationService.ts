@@ -52,6 +52,8 @@ export class NotificationService {
 
   static async checkAndNotifyRiskLevel(riskLevel: number): Promise<void> {
     try {
+      console.log(`🔔 NotificationService.checkAndNotifyRiskLevel called with: ${riskLevel}%`);
+      
       // HACKATHON DEMO: Always check, reduced cooldown
       const now = Date.now();
       if (now - this.lastNotificationTime < this.NOTIFICATION_COOLDOWN) {

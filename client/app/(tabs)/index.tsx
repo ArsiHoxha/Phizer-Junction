@@ -59,12 +59,9 @@ export default function DashboardScreen() {
     loadAndRecordStreak();
   }, []);
 
-  // Check risk level and send notifications
-  useEffect(() => {
-    if (currentRisk >= 30) {
-      NotificationService.checkAndNotifyRiskLevel(currentRisk);
-    }
-  }, [currentRisk]);
+  // NOTE: Notifications are now handled in DataCollectionContext
+  // to ensure they use the most up-to-date risk calculation
+  // Removed duplicate notification trigger from dashboard
 
   // Update widget data when risk changes
   useEffect(() => {
@@ -1307,11 +1304,6 @@ export default function DashboardScreen() {
                 backgroundColor: isDark ? 'rgba(26, 26, 26, 0.6)' : colors.card,
                 borderWidth: 1,
                 borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : colors.border,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-                elevation: 8,
               }} className="rounded-2xl p-3">
                 <View className="items-center mb-2">
                   <Ionicons name="cafe" size={28} color="#92400E" />

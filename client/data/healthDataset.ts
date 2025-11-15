@@ -30,10 +30,7 @@ export interface HealthDataPoint {
   calendarEvents: number; // Events today
   calendarStress: number; // 0-100
   
-  // Profile
-  migraineRisk: number; // 0-100 calculated risk
-  activeTriggers: string[]; // List of active triggers detected
-  hasMigraine: boolean; // Whether this led to a migraine
+  // Note: Migraine risk will be calculated by Gemini AI, not pre-generated
 }
 
 // Generate 100 realistic data points with medical patterns
@@ -179,143 +176,11 @@ function generateDataPoint(id: number, timestamp: Date, context: any): HealthDat
   const humidity = 60 + weatherCycle;
   const uvIndex = Math.max(0, Math.min(10, 3 + Math.cos(dayOfWeek) * 3));
   
-  // Low pressure increases migraine risk
+  // Low pressure slightly affects stress and HRV
   if (pressure < 1010) {
     stress += 10;
     hrv -= 5;
   }
-  
-  // Calculate migraine risk - COMPREHENSIVE TRIGGER ANALYSIS
-  let migraineRisk = 0;
-  let activeTriggers: string[] = [];
-  
-  // 1. HRV (Heart Rate Variability) - Nervous system stress
-  if (hrv < 40) {
-    migraineRisk += 40;
-    activeTriggers.push('Critical HRV');
-  } else if (hrv < 45) {
-    migraineRisk += 35;
-    activeTriggers.push('Very Low HRV');
-  } else if (hrv < 55) {
-    migraineRisk += 20;
-    activeTriggers.push('Low HRV');
-  }
-  
-  // 2. Stress & Anxiety
-  if (stress > 75) {
-    migraineRisk += 35;
-    activeTriggers.push('Extreme Stress');
-  } else if (stress > 70) {
-    migraineRisk += 30;
-    activeTriggers.push('High Stress');
-  } else if (stress > 50) {
-    migraineRisk += 18;
-    activeTriggers.push('Elevated Stress');
-  }
-  
-  // 3. Poor Sleep
-  if (sleepHours < 5) {
-    migraineRisk += 30;
-    activeTriggers.push('Severe Sleep Deprivation');
-  } else if (sleepHours < 6) {
-    migraineRisk += 20;
-    activeTriggers.push('Sleep Deprivation');
-  }
-  
-  if (sleepQuality < 50) {
-    migraineRisk += 30;
-    activeTriggers.push('Very Poor Sleep Quality');
-  } else if (sleepQuality < 60) {
-    migraineRisk += 25;
-    activeTriggers.push('Poor Sleep Quality');
-  } else if (sleepQuality < 70) {
-    migraineRisk += 15;
-    activeTriggers.push('Suboptimal Sleep');
-  }
-  
-  // 4. Weather Changes (Barometric Pressure)
-  if (pressure < 1005) {
-    migraineRisk += 25;
-    activeTriggers.push('Very Low Pressure');
-  } else if (pressure < 1008) {
-    migraineRisk += 18;
-    activeTriggers.push('Low Pressure');
-  } else if (pressure < 1010) {
-    migraineRisk += 12;
-    activeTriggers.push('Dropping Pressure');
-  }
-  
-  // 5. Screen Time / Bright Light
-  if (screenTimeMinutes > 420) {
-    migraineRisk += 25;
-    activeTriggers.push('Excessive Screen Time');
-  } else if (screenTimeMinutes > 350) {
-    migraineRisk += 15;
-    activeTriggers.push('High Screen Time');
-  } else if (screenTimeMinutes > 280) {
-    migraineRisk += 8;
-    activeTriggers.push('Elevated Screen Time');
-  }
-  
-  // 6. Dehydration (inferred from activity + time)
-  const isLikelyDehydrated = (activityLevel === 'Moderate') && timeOfDay === 'afternoon';
-  if (isLikelyDehydrated) {
-    migraineRisk += 12;
-    activeTriggers.push('Possible Dehydration');
-  }
-  
-  // 7. Loud Noise / Overstimulation (high notification count)
-  if (notificationCount > 120) {
-    migraineRisk += 15;
-    activeTriggers.push('Notification Overload');
-  } else if (notificationCount > 80) {
-    migraineRisk += 10;
-    activeTriggers.push('High Notifications');
-  }
-  
-  // 8. Calendar Stress (busy schedule)
-  if (calendarStress > 75) {
-    migraineRisk += 20;
-    activeTriggers.push('Overwhelming Schedule');
-  } else if (calendarStress > 60) {
-    migraineRisk += 15;
-    activeTriggers.push('High Schedule Pressure');
-  }
-  
-  // 9. Skipped Meals (inferred from low activity + time gaps)
-  const likelySkippedMeal = timeOfDay === 'afternoon' && activityLevel === 'Sedentary' && calendarEvents > 5;
-  if (likelySkippedMeal) {
-    migraineRisk += 18;
-    activeTriggers.push('Likely Skipped Meal');
-  }
-  
-  // 10. Physical Inactivity / Neck Tension
-  if (activityLevel === 'Sedentary' && screenTimeMinutes > 300) {
-    migraineRisk += 12;
-    activeTriggers.push('Sedentary + Screen Combo');
-  }
-  
-  // 11. Extreme Temperature/Humidity
-  if (humidity > 80 || humidity < 30) {
-    migraineRisk += 10;
-    activeTriggers.push('Extreme Humidity');
-  }
-  
-  if (temperature > 28 || temperature < 10) {
-    migraineRisk += 8;
-    activeTriggers.push('Temperature Extreme');
-  }
-  
-  // 12. High UV Index (bright light trigger)
-  if (uvIndex > 7) {
-    migraineRisk += 10;
-    activeTriggers.push('High UV/Bright Sun');
-  }
-  
-  migraineRisk = Math.min(100, migraineRisk);
-  
-  // Migraine occurs when risk > 70 and multiple factors align
-  const hasMigraine = migraineRisk > 70 && hrv < 45 && (stress > 65 || sleepQuality < 65 || pressure < 1009);
   
   // Add some randomness (±5%) for realism
   hrv = Math.round(hrv + (Math.random() - 0.5) * 10);
@@ -341,9 +206,6 @@ function generateDataPoint(id: number, timestamp: Date, context: any): HealthDat
     uvIndex: Math.round(uvIndex * 10) / 10,
     calendarEvents: Math.max(0, Math.min(12, calendarEvents)),
     calendarStress: Math.max(0, Math.min(100, calendarStress)),
-    migraineRisk: Math.round(migraineRisk),
-    activeTriggers, // Include list of detected triggers
-    hasMigraine,
   };
 }
 
@@ -354,9 +216,9 @@ export const HEALTH_DATASET: HealthDataPoint[] = generateRealisticDataset();
 console.log(`📊 Health Dataset Generated:
 - Total entries: ${HEALTH_DATASET.length}
 - Date range: ${HEALTH_DATASET[0].timestamp.toLocaleDateString()} - ${HEALTH_DATASET[HEALTH_DATASET.length - 1].timestamp.toLocaleDateString()}
-- Migraines in dataset: ${HEALTH_DATASET.filter(d => d.hasMigraine).length}
 - Average HRV: ${Math.round(HEALTH_DATASET.reduce((sum, d) => sum + d.hrv, 0) / HEALTH_DATASET.length)}ms
-- Average Risk: ${Math.round(HEALTH_DATASET.reduce((sum, d) => sum + d.migraineRisk, 0) / HEALTH_DATASET.length)}%
+- Average Stress: ${Math.round(HEALTH_DATASET.reduce((sum, d) => sum + d.stress, 0) / HEALTH_DATASET.length)}%
+- Note: Migraine risk will be calculated by Gemini AI 2.5-flash-lite
 `);
 
 // Helper function to get data point by index

@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppleHealthService from '../services/appleHealthService';
 import { getDatasetService } from '../services/datasetService';
 import { NotificationService } from '../services/notificationService';
+import { getGeminiRiskService } from '../services/geminiRiskService';
 
 const WEARABLE_TASK = 'wearable-data-collection';
 const USE_DATASET_KEY = '@use_realistic_dataset';
@@ -141,6 +142,8 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
    */
   const checkAndNotify = async (risk: number) => {
     try {
+      console.log(`🔔 Checking notification for risk: ${risk}% (Last notified: ${lastNotifiedRisk.current}%)`);
+      
       // HACKATHON MODE: More aggressive - notify on smaller changes
       const riskDifference = Math.abs(risk - lastNotifiedRisk.current);
       const crossedThreshold = 
@@ -156,6 +159,8 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
         await NotificationService.checkAndNotifyRiskLevel(risk);
         lastNotifiedRisk.current = risk;
         await AsyncStorage.setItem(NOTIFIED_RISK_LEVELS_KEY, risk.toString());
+      } else {
+        console.log(`ℹ️ No notification needed - Diff: ${riskDifference}%, No threshold crossed`);
       }
     } catch (error) {
       console.error('Error checking and notifying:', error);
@@ -206,7 +211,6 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
   const collectWearableData = async () => {
     try {
       let mergedData: any;
-      let risk: number;
 
       // Priority: Dataset > Apple Health > Simulator
       if (useDataset) {
@@ -216,18 +220,15 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
         
         if (dataPoint) {
           mergedData = datasetService.toWearableData(dataPoint);
-          risk = datasetService.getCurrentRisk();
         } else {
           // Fallback to simulator if dataset disabled
           const simulator = getWearableSimulator();
           mergedData = simulator.getCurrentData();
-          risk = simulator.getCurrentRisk();
         }
       } else {
         // Use simulator
         const simulator = getWearableSimulator();
         mergedData = simulator.getCurrentData();
-        risk = simulator.getCurrentRisk();
         
         // Check if Apple Health is connected and fetch real data
         if (Platform.OS === 'ios') {
@@ -251,7 +252,42 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
         }
       }
       
+      // Calculate risk using Gemini AI 2.0-flash-exp (not random calculations)
+      console.log('🤖 Calculating migraine risk with Gemini AI...');
+      const geminiService = getGeminiRiskService();
+      let risk = 0; // Initialize risk variable
+      
+      try {
+        const riskAnalysis = await geminiService.calculateRisk({
+          hrv: mergedData.hrv,
+          heartRate: mergedData.heartRate,
+          stress: mergedData.stress,
+          sleepQuality: mergedData.sleepQuality,
+          sleepHours: mergedData.sleepHours || 7,
+          steps: mergedData.steps || 0,
+          screenTimeMinutes: latestData.phoneData?.screenTimeMinutes || 0,
+          notificationCount: latestData.phoneData?.notificationCount || 0,
+          activityLevel: mergedData.activityLevel || 'Moderate',
+          temperature: latestData.weather?.temperature || 20,
+          humidity: latestData.weather?.humidity || 50,
+          pressure: latestData.weather?.pressure || 1013,
+          uvIndex: latestData.weather?.uvIndex || 3,
+          calendarEvents: latestData.calendar?.eventsToday || 0,
+          calendarStress: latestData.calendar?.stressLevel || 30,
+        });
+        
+        risk = riskAnalysis.riskScore;
+        console.log(`🤖 Gemini AI Risk: ${risk}% (${riskAnalysis.riskLevel})`);
+        console.log(`🎯 Triggers: ${riskAnalysis.primaryTriggers.join(', ')}`);
+        console.log(`💡 Reasoning: ${riskAnalysis.reasoning}`);
+      } catch (error) {
+        console.error('❌ Gemini AI calculation failed, using fallback');
+        risk = 0; // Fallback if Gemini fails
+      }
+      
       const roundedRisk = Math.round(risk);
+      console.log(`📊 Final Risk: ${roundedRisk}%`);
+      console.log(`📊 Current HRV: ${mergedData.hrv}, Stress: ${mergedData.stress}`);
       setCurrentRisk(roundedRisk);
       
       const updatedData = { ...latestData, wearable: mergedData };
@@ -261,7 +297,8 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
       await persistLatestData(updatedData);
       await persistCurrentRisk(roundedRisk);
       
-      // Automatically check and send notifications
+      // Automatically check and send notifications with current risk
+      console.log(`🔔 About to call checkAndNotify with risk: ${roundedRisk}%`);
       await checkAndNotify(roundedRisk);
       
       // Send to backend every minute (not every 5 seconds to reduce load)

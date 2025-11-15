@@ -262,18 +262,12 @@ class WearableSimulator {
 
   /**
    * Get current migraine risk percentage (0-100)
+   * NOTE: Risk is now calculated by Gemini AI, not by simulator
+   * This returns 0 - real risk comes from geminiRiskService
    */
   public getCurrentRisk(): number {
-    this.updateMigrainePhase();
-    
-    if (!this.migraineSimulation.isPreMigrainePhase) {
-      return 10 + Math.random() * 20; // Low baseline risk
-    }
-    
-    const hoursUntil = this.migraineSimulation.hoursUntilMigraine!;
-    const risk = Math.max(0, 100 - (hoursUntil / 12) * 70); // Increases as migraine approaches
-    
-    return Math.min(95, risk);
+    // No more random calculations - Gemini AI handles this
+    return 0;
   }
 }
 
