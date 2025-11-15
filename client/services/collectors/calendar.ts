@@ -63,7 +63,13 @@ class CalendarIntegration {
    * Get today's events
    */
   private async getTodayEvents(): Promise<CalendarEvent[]> {
+    // Try to request permissions if not already granted
+    if (!this.calendarPermissionGranted) {
+      await this.requestPermissions();
+    }
+
     if (!this.calendarPermissionGranted || !this.defaultCalendarId) {
+      console.log('📅 Calendar: Using simulated data (no permission or calendar)');
       return this.getSimulatedEvents();
     }
 
@@ -79,6 +85,8 @@ class CalendarIntegration {
         startOfDay,
         endOfDay
       );
+
+      console.log(`📅 Calendar: Found ${events.length} real events today`);
 
       return events.map(event => ({
         title: event.title,

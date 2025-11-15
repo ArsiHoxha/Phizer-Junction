@@ -24,23 +24,23 @@ const MonitoringToggle: React.FC<MonitoringToggleProps> = ({
   badge 
 }) => {
   return (
-    <View className="p-5">
-      <View className="flex-row items-center justify-between mb-2">
+    <View className="p-4">
+      <View className="flex-row items-center justify-between mb-1.5">
         <View className="flex-row items-center flex-1">
-          <Text style={{ color: colors.text }} className="text-base font-semibold flex-1">
+          <Text style={{ color: colors.text }} className="text-sm font-semibold flex-1">
             {title}
           </Text>
           {badge && (
-            <View className="bg-blue-100 px-2 py-1 rounded-full ml-2">
-              <Text className="text-blue-600 text-xs font-semibold">{badge}</Text>
+            <View className="bg-blue-100 px-2 py-0.5 rounded-full ml-2">
+              <Text className="text-blue-600 text-[10px] font-semibold">{badge}</Text>
             </View>
           )}
         </View>
-        <View className={`w-10 h-6 rounded-full ${enabled ? 'bg-green-500' : 'bg-gray-300'} justify-center ${enabled ? 'items-end' : 'items-start'} px-1`}>
+        <View className={`w-9 h-5 rounded-full ${enabled ? 'bg-green-500' : 'bg-gray-300'} justify-center ${enabled ? 'items-end' : 'items-start'} px-0.5`}>
           <View className="w-4 h-4 rounded-full bg-white" />
         </View>
       </View>
-      <Text style={{ color: colors.textSecondary }} className="text-sm">
+      <Text style={{ color: colors.textSecondary }} className="text-xs">
         {description}
       </Text>
     </View>
@@ -85,7 +85,7 @@ export default function SettingsScreen() {
         {/* Header */}
         <Animated.View 
           entering={FadeInDown.duration(800)}
-          className="px-6 pt-16 pb-6"
+          className="px-6 pt-8 pb-6"
         >
           <Text style={{ color: colors.text }} className="text-3xl font-bold mb-2">
             Settings
@@ -101,32 +101,38 @@ export default function SettingsScreen() {
             Account
           </Text>
           
-          <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-3xl p-5 border">
-            <View className="flex-row items-center mb-4">
-              <View style={{ backgroundColor: colors.primary }} className="w-16 h-16 rounded-full items-center justify-center mr-4">
-                <Text className="text-white text-2xl font-bold">
+          <View style={{ 
+            backgroundColor: isDark ? '#000000' : colors.card, 
+            borderColor: isDark ? '#2D2D2D' : colors.border 
+          }} className="rounded-3xl p-4 border">
+            <View className="flex-row items-center mb-3">
+              <View style={{ backgroundColor: isDark ? '#FFFFFF' : colors.primary }} className="w-12 h-12 rounded-full items-center justify-center mr-3">
+                <Text style={{ color: isDark ? '#000000' : '#FFFFFF' }} className="text-lg font-bold">
                   {user?.firstName?.[0] || user?.emailAddresses[0]?.emailAddress[0].toUpperCase()}
                 </Text>
               </View>
               <View className="flex-1">
-                <Text style={{ color: colors.text }} className="text-lg font-semibold mb-1">
+                <Text style={{ color: colors.text }} className="text-base font-semibold mb-0.5">
                   {user?.firstName || 'User'}
                 </Text>
-                <Text style={{ color: colors.textSecondary }} className="text-sm">
+                <Text style={{ color: colors.textSecondary }} className="text-xs">
                   {user?.emailAddresses[0]?.emailAddress}
                 </Text>
               </View>
             </View>
             
             {/* Data Collection Status */}
-            <View style={{ backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5' }} className="rounded-2xl p-4 flex-row items-center justify-between">
+            <View style={{ 
+              backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5',
+              borderColor: isDark ? '#2D2D2D' : 'transparent'
+            }} className="rounded-2xl p-3 flex-row items-center justify-between border">
               <View className="flex-row items-center">
-                <View className={`w-3 h-3 rounded-full ${isCollecting ? 'bg-green-500' : 'bg-gray-400'} mr-3`} />
-                <Text style={{ color: colors.text }} className="text-sm font-medium">
+                <View className={`w-2 h-2 rounded-full ${isCollecting ? 'bg-green-500' : 'bg-gray-400'} mr-2`} />
+                <Text style={{ color: colors.text }} className="text-xs font-medium">
                   Passive Monitoring
                 </Text>
               </View>
-              <Text style={{ color: colors.textSecondary }} className="text-sm">
+              <Text style={{ color: colors.textSecondary }} className="text-xs">
                 {isCollecting ? 'Active' : 'Paused'}
               </Text>
             </View>
@@ -139,27 +145,30 @@ export default function SettingsScreen() {
             Appearance
           </Text>
           
-          <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-3xl p-5 border">
-            <Text style={{ color: colors.text }} className="text-base font-semibold mb-4">
+          <View style={{ 
+            backgroundColor: isDark ? '#000000' : colors.card, 
+            borderColor: isDark ? '#2D2D2D' : colors.border 
+          }} className="rounded-3xl p-4 border">
+            <Text style={{ color: colors.text }} className="text-sm font-semibold mb-3">
               Theme
             </Text>
             
-            <View className="flex-row space-x-3">
+            <View style={{ backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6' }} className="flex-row rounded-full p-1">
               {themeOptions.map((option) => (
                 <TouchableOpacity
                   key={option.value}
                   onPress={() => setTheme(option.value)}
                   style={{
-                    backgroundColor: theme === option.value ? colors.primary : (isDark ? '#1a1a1a' : '#f5f5f5'),
-                    borderColor: theme === option.value ? colors.primary : colors.border,
+                    backgroundColor: theme === option.value ? (isDark ? '#FFFFFF' : '#000000') : 'transparent',
                   }}
-                  className="flex-1 py-3 rounded-full border items-center"
+                  className="flex-1 py-2 rounded-full items-center"
                   activeOpacity={0.7}
                 >
                   <Text
                     style={{
-                      color: theme === option.value ? '#fff' : colors.text,
+                      color: theme === option.value ? (isDark ? '#000000' : '#FFFFFF') : colors.text,
                       fontWeight: theme === option.value ? '600' : '400',
+                      fontSize: 13,
                     }}
                   >
                     {option.label}
@@ -176,7 +185,10 @@ export default function SettingsScreen() {
             Passive Monitoring
           </Text>
           
-          <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-3xl border overflow-hidden">
+          <View style={{ 
+            backgroundColor: isDark ? '#000000' : colors.card, 
+            borderColor: isDark ? '#2D2D2D' : colors.border 
+          }} className="rounded-3xl border overflow-hidden">
             <MonitoringToggle
               title="HRV & Heart Rate"
               description="Real-time cardiovascular monitoring for early warning"
@@ -253,16 +265,19 @@ export default function SettingsScreen() {
           
           <TouchableOpacity
             onPress={handleResetOnboarding}
-            style={{ backgroundColor: colors.card, borderColor: colors.border }}
-            className="rounded-3xl p-5 border mb-3"
+            style={{ 
+              backgroundColor: isDark ? '#000000' : colors.card, 
+              borderColor: isDark ? '#2D2D2D' : colors.border 
+            }}
+            className="rounded-3xl p-4 border mb-3"
             activeOpacity={0.7}
           >
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
-                <Text style={{ color: colors.text }} className="text-base font-semibold mb-1">
+                <Text style={{ color: colors.text }} className="text-sm font-semibold mb-0.5">
                   Reset Onboarding
                 </Text>
-                <Text style={{ color: colors.textSecondary }} className="text-sm">
+                <Text style={{ color: colors.textSecondary }} className="text-xs">
                   Update permissions and preferences
                 </Text>
               </View>
@@ -271,16 +286,19 @@ export default function SettingsScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={{ backgroundColor: colors.card, borderColor: colors.border }}
-            className="rounded-3xl p-5 border"
+            style={{ 
+              backgroundColor: isDark ? '#000000' : colors.card, 
+              borderColor: isDark ? '#2D2D2D' : colors.border 
+            }}
+            className="rounded-3xl p-4 border"
             activeOpacity={0.7}
           >
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
-                <Text style={{ color: colors.text }} className="text-base font-semibold mb-1">
+                <Text style={{ color: colors.text }} className="text-sm font-semibold mb-0.5">
                   Export Data
                 </Text>
-                <Text style={{ color: colors.textSecondary }} className="text-sm">
+                <Text style={{ color: colors.textSecondary }} className="text-xs">
                   Download your health records
                 </Text>
               </View>
@@ -295,8 +313,11 @@ export default function SettingsScreen() {
             Privacy & Security
           </Text>
           
-          <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-3xl p-5 border">
-            <Text style={{ color: colors.text }} className="text-sm leading-6">
+          <View style={{ 
+            backgroundColor: isDark ? '#000000' : colors.card, 
+            borderColor: isDark ? '#2D2D2D' : colors.border 
+          }} className="rounded-3xl p-4 border">
+            <Text style={{ color: colors.text }} className="text-xs leading-5">
               All health data is encrypted end-to-end and stored securely. We never sell or share your personal information.
             </Text>
           </View>

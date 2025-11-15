@@ -26,13 +26,30 @@ Health Data:
 - Calendar Stress Score: ${healthData.calendar?.stressScore || 'N/A'}%
 - Current Risk Score: ${healthData.currentRisk || 'N/A'}%
 
-Please provide:
-1. **Primary Concerns**: Identify the top 2-3 most concerning metrics that could trigger a migraine
-2. **Root Cause Analysis**: Explain what's causing these issues based on the data patterns
-3. **Immediate Actions**: 3-4 specific, actionable recommendations the user should take right now
-4. **Prevention Tips**: 2-3 lifestyle adjustments for long-term migraine prevention
+Format your response EXACTLY like this with proper structure:
 
-Keep your response concise (max 250 words), empathetic, and actionable. Focus on migraine-specific triggers.`;
+PRIMARY CONCERNS
+• [First concerning metric and why it matters]
+• [Second concerning metric and why it matters]
+• [Third concerning metric if applicable]
+
+ROOT CAUSE ANALYSIS
+• [First identified pattern or cause]
+• [Second identified pattern or cause]
+• [Third pattern if applicable]
+
+IMMEDIATE ACTIONS
+• [First specific action to take now]
+• [Second specific action to take now]
+• [Third specific action to take now]
+• [Fourth action if needed]
+
+PREVENTION TIPS
+• [First long-term lifestyle adjustment]
+• [Second long-term lifestyle adjustment]
+• [Third adjustment if applicable]
+
+Keep it concise (max 250 words), empathetic, and actionable. Focus on migraine-specific triggers.`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;

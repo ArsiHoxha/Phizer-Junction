@@ -325,17 +325,23 @@ export default function DashboardScreen() {
           entering={FadeInDown.duration(800)}
           className="mx-6 mb-6"
         >
-          <View className="bg-black rounded-3xl p-8">
-            <Text className="text-gray-400 text-sm mb-3 tracking-wider">
+          <View style={{ 
+            backgroundColor: isDark ? '#000000' : '#1A1A1A',
+            borderWidth: 1,
+            borderColor: isDark ? '#2D2D2D' : '#3D3D3D'
+          }} className="rounded-3xl p-8">
+            <Text style={{ 
+              color: isDark ? '#9CA3AF' : '#D1D5DB' 
+            }} className="text-sm mb-3 tracking-wider">
               MIGRAINE RISK INDEX
             </Text>
             <View className="flex-row items-end mb-4">
-              <Text className="text-white text-7xl font-bold">{riskLevel}</Text>
-              <Text className="text-white text-3xl font-bold mb-2">%</Text>
+              <Text style={{ color: '#FFFFFF' }} className="text-7xl font-bold">{riskLevel}</Text>
+              <Text style={{ color: '#FFFFFF' }} className="text-3xl font-bold mb-2">%</Text>
             </View>
             <View className="flex-row items-center mb-6">
               <View className={`w-3 h-3 rounded-full ${riskColor} mr-2`} />
-              <Text className="text-gray-300 text-lg font-medium">{riskStatus} Risk</Text>
+              <Text style={{ color: isDark ? '#D1D5DB' : '#E5E7EB' }} className="text-lg font-medium">{riskStatus} Risk</Text>
               {isCollecting && (
                 <View className="ml-auto">
                   <View className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -345,18 +351,22 @@ export default function DashboardScreen() {
 
             {/* Real-time Risk Trend Chart */}
             {historicalData.length >= 2 ? (
-              <View className="border-t border-gray-800 pt-4">
+              <View style={{ 
+                borderTopWidth: 1, 
+                borderTopColor: isDark ? '#2D2D2D' : '#3D3D3D',
+                paddingTop: 16 
+              }}>
                 <LineChart
                   data={getChartData()}
                   width={width - 100}
                   height={100}
                   chartConfig={{
-                    backgroundColor: '#000',
-                    backgroundGradientFrom: '#000',
-                    backgroundGradientTo: '#000',
+                    backgroundColor: isDark ? '#000000' : '#1A1A1A',
+                    backgroundGradientFrom: isDark ? '#000000' : '#1A1A1A',
+                    backgroundGradientTo: isDark ? '#000000' : '#1A1A1A',
                     decimalPlaces: 0,
                     color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(156, 163, 175, ${opacity})`,
+                    labelColor: (opacity = 1) => isDark ? `rgba(156, 163, 175, ${opacity})` : `rgba(209, 213, 219, ${opacity})`,
                     style: {
                       borderRadius: 16
                     },
@@ -387,19 +397,20 @@ export default function DashboardScreen() {
 
         {/* Period Selector */}
         <View className="px-6 mb-4">
-          <View className="flex-row bg-gray-100 rounded-full p-1">
+          <View style={{ backgroundColor: isDark ? '#000000' : '#f3f4f6' }} className="flex-row rounded-full p-1">
             {['today', 'week', 'month'].map((period) => (
               <TouchableOpacity
                 key={period}
                 onPress={() => setSelectedPeriod(period)}
-                className={`flex-1 py-2 rounded-full ${
-                  selectedPeriod === period ? 'bg-black' : 'bg-transparent'
-                }`}
+                style={{ backgroundColor: selectedPeriod === period ? (isDark ? '#FFFFFF' : '#000000') : 'transparent' }}
+                className="flex-1 py-2 rounded-full"
                 activeOpacity={0.7}
               >
-                <Text className={`text-center text-sm font-semibold capitalize ${
-                  selectedPeriod === period ? 'text-white' : 'text-gray-600'
-                }`}>
+                <Text style={{ 
+                  color: selectedPeriod === period 
+                    ? (isDark ? '#000000' : '#FFFFFF') 
+                    : (isDark ? '#9CA3AF' : '#6B7280')
+                }} className="text-center text-sm font-semibold capitalize">
                   {period}
                 </Text>
               </TouchableOpacity>
@@ -443,8 +454,8 @@ export default function DashboardScreen() {
               return (
                 <View key={index} className="flex-1 mx-1">
                   <View style={{ 
-                    backgroundColor: colors.card, 
-                    borderColor: colors.border,
+                    backgroundColor: isDark ? '#000000' : colors.card,
+                    borderColor: isDark ? '#2D2D2D' : colors.border,
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: 2 },
                     shadowOpacity: isDark ? 0.3 : 0.1,
@@ -456,7 +467,7 @@ export default function DashboardScreen() {
                       width={5}
                       fill={Math.min(100, Math.max(0, percentage))}
                       tintColor={progressColor}
-                      backgroundColor={isDark ? '#2a2a2a' : '#e5e5e5'}
+                      backgroundColor={isDark ? '#1a1a1a' : '#e5e5e5'}
                       rotation={0}
                     >
                       {() => (
@@ -519,15 +530,9 @@ export default function DashboardScreen() {
         >
           <View style={{ 
             backgroundColor: colors.card,
-            borderColor: colors.border,
-            shadowColor: colors.primary,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.2,
-            shadowRadius: 8,
-            elevation: 5,
           }} className="rounded-3xl p-6 border-2">
-            <View className="flex-row items-center mb-4">
-              <View style={{ backgroundColor: colors.primary }} className="w-12 h-12 rounded-2xl items-center justify-center mr-3">
+            <View className="flex-row items-center mb-6">
+              <View style={{ backgroundColor: "black" }} className="w-12 h-12 rounded-2xl items-center justify-center mr-3">
                 <Ionicons name="sparkles" size={24} color="#fff" />
               </View>
               <View className="flex-1">
@@ -550,18 +555,13 @@ export default function DashboardScreen() {
             <TouchableOpacity 
               onPress={fetchAIAnalysis}
               style={{ 
-                backgroundColor: colors.primary,
-                shadowColor: colors.primary,
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 6,
-                elevation: 4,
+                backgroundColor: 'black',
               }}
               className="rounded-2xl py-3.5 px-6 flex-row items-center justify-center"
               activeOpacity={0.8}
             >
               <Ionicons name="sparkles" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text className="text-white font-bold text-base">Get Full Analysis</Text>
+              <Text className="text-white font-bold  text-base">Get Full Analysis</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -578,7 +578,11 @@ export default function DashboardScreen() {
         onRequestClose={() => setShowAIModal(false)}
       >
         <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <View style={{ backgroundColor: colors.background }} className="rounded-t-3xl p-6 max-h-4/5">
+          <View style={{ 
+            backgroundColor: isDark ? '#000000' : colors.background,
+            maxHeight: '85%',
+            height: '85%'
+          }} className="rounded-t-3xl p-6">
             <View className="flex-row items-center justify-between mb-4">
               <View className="flex-row items-center">
                 <Ionicons name="sparkles" size={24} color={colors.primary} />
@@ -608,7 +612,11 @@ export default function DashboardScreen() {
               </View>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} className="mb-4">
+            <ScrollView 
+              showsVerticalScrollIndicator={true} 
+              className="flex-1 mb-4"
+              style={{ maxHeight: '100%' }}
+            >
               {loadingAI ? (
                 <View className="py-12 items-center">
                   <ActivityIndicator size="large" color={colors.primary} />
@@ -629,21 +637,71 @@ export default function DashboardScreen() {
                       </Text>
                     </View>
                   )}
-                  <Text style={{ color: colors.text }} className="text-base leading-7">
-                    {aiAnalysis}
-                  </Text>
+                  
+                  {/* Render formatted AI analysis */}
+                  <View className="pb-4">
+                    {aiAnalysis.split('\n').map((line, index) => {
+                      // Remove asterisks from the line
+                      const cleanedLine = line.replace(/\*\*/g, '').replace(/\*/g, '');
+                      const trimmedLine = cleanedLine.trim();
+                      
+                      // Check if line is a section title (ALL CAPS)
+                      if (trimmedLine && trimmedLine === trimmedLine.toUpperCase() && !trimmedLine.startsWith('•')) {
+                        return (
+                          <View key={index} className="mt-4 mb-2">
+                            <Text style={{ color: colors.text }} className="text-lg font-bold">
+                              {trimmedLine}
+                            </Text>
+                            <View style={{ backgroundColor: isDark ? '#FFFFFF' : colors.primary, height: 3, width: 40 }} className="mt-1 rounded-full" />
+                          </View>
+                        );
+                      }
+                      
+                      // Check if line is a bullet point
+                      if (trimmedLine.startsWith('•')) {
+                        return (
+                          <View key={index} className="flex-row mb-2.5 pl-2">
+                            <Text style={{ color: isDark ? '#FFFFFF' : colors.primary }} className="text-base mr-2 font-bold">
+                              •
+                            </Text>
+                            <Text style={{ color: colors.text }} className="text-base leading-6 flex-1">
+                              {trimmedLine.substring(1).trim()}
+                            </Text>
+                          </View>
+                        );
+                      }
+                      
+                      // Regular text
+                      if (trimmedLine) {
+                        return (
+                          <Text key={index} style={{ color: colors.text }} className="text-base leading-6 mb-2">
+                            {trimmedLine}
+                          </Text>
+                        );
+                      }
+                      
+                      return null;
+                    })}
+                  </View>
                 </View>
               )}
             </ScrollView>
 
-            <TouchableOpacity
-              onPress={() => setShowAIModal(false)}
-              style={{ backgroundColor: colors.primary }}
-              className="rounded-full py-4"
-              activeOpacity={0.8}
-            >
-              <Text className="text-white text-center font-semibold">Close</Text>
-            </TouchableOpacity>
+            <View style={{ 
+              backgroundColor: isDark ? '#000000' : colors.background,
+              paddingTop: 12,
+              borderTopWidth: 1,
+              borderTopColor: isDark ? '#2D2D2D' : colors.border
+            }}>
+              <TouchableOpacity
+                onPress={() => setShowAIModal(false)}
+                style={{ backgroundColor: isDark ? '#FFFFFF' : colors.primary }}
+                className="rounded-full py-4"
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: isDark ? '#000000' : '#FFFFFF' }} className="text-center font-semibold">Close</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

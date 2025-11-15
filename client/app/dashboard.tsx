@@ -58,7 +58,7 @@ export default function DashboardScreen() {
         >
           <View className="bg-black rounded-3xl p-8">
             <Text className="text-gray-400 text-sm mb-3 tracking-wider">
-              MIGRAINE RISK INDEX
+              MIGRAINE RISK INDEs
             </Text>
             <View className="flex-row items-end mb-4">
               <Text className="text-white text-7xl font-bold">{riskLevel}</Text>
@@ -150,13 +150,13 @@ export default function DashboardScreen() {
         >
           <View className="bg-gradient-to-br from-gray-900 to-black rounded-3xl p-6 border border-gray-800">
             <View className="flex-row items-center mb-3">
-              <View className="w-10 h-10 rounded-full bg-white items-center justify-center mr-3">
+              <View className="w-10 bg-black h-10 bg-black rounded-full bg-black items-center justify-center mr-3">
                 <Text className="text-xl">💡</Text>
               </View>
               <Text className="text-white text-lg font-semibold">AI Insight</Text>
             </View>
             <Text className="text-gray-300 text-base leading-6 mb-4">
-              Your HRV dropped 18% today and screen time exceeded usual by 40%. Consider taking breaks every 30 minutes and hydrate more frequently.
+              Your HRV dropped 18% today and screen time exed usual by 40%. Consider taking breaks every 30 minutes and hydrate more frequently.
             </Text>
             <TouchableOpacity 
               className="bg-white rounded-full py-3 px-6 self-start"

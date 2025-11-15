@@ -142,13 +142,19 @@ export default function AnalysisScreen() {
                 key={category.id}
                 onPress={() => setSelectedCategory(category.id)}
                 style={{ 
-                  backgroundColor: selectedCategory === category.id ? colors.primary : colors.card,
-                  borderColor: colors.border
+                  backgroundColor: selectedCategory === category.id 
+                    ? (isDark ? '#FFFFFF' : '#000000')
+                    : (isDark ? '#000000' : colors.card),
+                  borderColor: selectedCategory === category.id 
+                    ? (isDark ? '#FFFFFF' : '#000000')
+                    : (isDark ? '#2D2D2D' : colors.border)
                 }}
                 className={`mr-3 px-4 py-3 rounded-xl border ${index === 0 ? 'ml-0' : ''}`}
               >
                 <Text style={{ 
-                  color: selectedCategory === category.id ? '#fff' : colors.text 
+                  color: selectedCategory === category.id 
+                    ? (isDark ? '#000000' : '#FFFFFF')
+                    : colors.text
                 }} className="text-sm font-semibold">
                   {category.label}
                 </Text>
@@ -159,23 +165,22 @@ export default function AnalysisScreen() {
 
         {/* Period Selector */}
         <View className="px-6 mb-6">
-          <View className="flex-row justify-center space-x-2">
+          <View style={{ backgroundColor: isDark ? '#000000' : '#f3f4f6' }} className="flex-row rounded-full p-1">
             {periods.map((period) => (
               <TouchableOpacity
                 key={period}
                 onPress={() => setSelectedPeriod(period)}
-                style={{
-                  backgroundColor: selectedPeriod === period ? colors.primary : 'transparent',
-                  borderColor: selectedPeriod === period ? colors.primary : colors.border,
-                }}
-                className="px-5 py-1.5 rounded-full border"
+                style={{ backgroundColor: selectedPeriod === period ? (isDark ? '#FFFFFF' : '#000000') : 'transparent' }}
+                className="flex-1 py-2 rounded-full"
                 activeOpacity={0.7}
               >
                 <Text
                   style={{
-                    color: selectedPeriod === period ? '#fff' : colors.textSecondary,
+                    color: selectedPeriod === period 
+                      ? (isDark ? '#000000' : '#FFFFFF') 
+                      : (isDark ? '#9CA3AF' : '#6B7280')
                   }}
-                  className="text-xs font-semibold"
+                  className="text-center text-sm font-semibold"
                 >
                   {period}
                 </Text>
@@ -197,7 +202,10 @@ export default function AnalysisScreen() {
               </Text>
               
               {historicalData.length >= 2 ? (
-            <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
+            <View style={{ 
+              backgroundColor: isDark ? '#000000' : colors.card, 
+              borderColor: isDark ? '#2D2D2D' : colors.border 
+            }} className="rounded-2xl border p-4">
               <LineChart
                 data={getMetricChartData('hrv')}
                 width={280}
@@ -240,7 +248,10 @@ export default function AnalysisScreen() {
               </View>
             </View>
           ) : (
-            <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-8">
+            <View style={{ 
+              backgroundColor: isDark ? '#000000' : colors.card, 
+              borderColor: isDark ? '#2D2D2D' : colors.border 
+            }} className="rounded-2xl border p-8">
               <Text style={{ color: colors.textSecondary }} className="text-center">
                 Collecting data...
               </Text>
@@ -258,7 +269,10 @@ export default function AnalysisScreen() {
           </Text>
           
           {historicalData.length >= 2 ? (
-            <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
+            <View style={{ 
+              backgroundColor: isDark ? '#000000' : colors.card, 
+              borderColor: isDark ? '#2D2D2D' : colors.border 
+            }} className="rounded-2xl border p-4">
               <LineChart
                 data={getMetricChartData('stress')}
                 width={280}
@@ -308,7 +322,10 @@ export default function AnalysisScreen() {
               </View>
             </View>
           ) : (
-            <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-8">
+            <View style={{ 
+              backgroundColor: isDark ? '#000000' : colors.card, 
+              borderColor: isDark ? '#2D2D2D' : colors.border 
+            }} className="rounded-2xl border p-8">
               <Text style={{ color: colors.textSecondary }} className="text-center">
                 Collecting data...
               </Text>
@@ -326,7 +343,10 @@ export default function AnalysisScreen() {
           </Text>
           
           {historicalData.length >= 2 ? (
-            <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
+            <View style={{ 
+              backgroundColor: isDark ? '#000000' : colors.card, 
+              borderColor: isDark ? '#2D2D2D' : colors.border 
+            }} className="rounded-2xl border p-4">
               <LineChart
                 data={getMetricChartData('heartRate')}
                 width={280}
@@ -369,7 +389,10 @@ export default function AnalysisScreen() {
               </View>
             </View>
           ) : (
-            <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-8">
+            <View style={{ 
+              backgroundColor: isDark ? '#000000' : colors.card, 
+              borderColor: isDark ? '#2D2D2D' : colors.border 
+            }} className="rounded-2xl border p-8">
               <Text style={{ color: colors.textSecondary }} className="text-center">
                 Collecting data...
               </Text>
@@ -391,7 +414,10 @@ export default function AnalysisScreen() {
                 Screen Time Usage
               </Text>
               
-              <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
+              <View style={{ 
+                backgroundColor: isDark ? '#000000' : colors.card, 
+                borderColor: isDark ? '#2D2D2D' : colors.border 
+              }} className="rounded-2xl border p-4">
                 <View className="items-center py-8">
                   <Text style={{ color: colors.text }} className="text-6xl font-bold mb-2">
                     {screenTimeHours}h
@@ -422,7 +448,10 @@ export default function AnalysisScreen() {
                 Sleep Quality
               </Text>
               
-              <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
+              <View style={{ 
+                backgroundColor: isDark ? '#000000' : colors.card, 
+                borderColor: isDark ? '#2D2D2D' : colors.border 
+              }} className="rounded-2xl border p-4">
                 <View className="items-center py-8">
                   <Text style={{ color: colors.text }} className="text-6xl font-bold mb-2">
                     {sleepHours}h
@@ -458,7 +487,10 @@ export default function AnalysisScreen() {
                 Environmental Conditions
               </Text>
               
-              <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
+              <View style={{ 
+                backgroundColor: isDark ? '#000000' : colors.card, 
+                borderColor: isDark ? '#2D2D2D' : colors.border 
+              }} className="rounded-2xl border p-4">
                 <View className="items-center py-8">
                   <Text style={{ color: colors.text }} className="text-6xl font-bold mb-2">
                     {Math.round(weatherData.temperature || 20)}°
@@ -498,7 +530,10 @@ export default function AnalysisScreen() {
                 Calendar & Stress
               </Text>
               
-              <View style={{ backgroundColor: colors.card, borderColor: colors.border }} className="rounded-2xl border p-4">
+              <View style={{ 
+                backgroundColor: isDark ? '#000000' : colors.card, 
+                borderColor: isDark ? '#2D2D2D' : colors.border 
+              }} className="rounded-2xl border p-4">
                 <View className="items-center py-8">
                   <Text style={{ color: colors.text }} className="text-6xl font-bold mb-2">
                     {calendarData.eventsToday || 0}
@@ -531,7 +566,10 @@ export default function AnalysisScreen() {
             Live Data Stream
           </Text>
           
-          <View className="bg-black rounded-3xl p-6 border border-gray-800">
+          <View style={{
+            backgroundColor: isDark ? '#000000' : '#000000',
+            borderColor: isDark ? '#2D2D2D' : '#1F1F1F'
+          }} className="rounded-3xl p-6 border">
             <View className="flex-row items-center mb-4">
               <View className={`w-3 h-3 rounded-full ${isCollecting ? 'bg-green-500' : 'bg-gray-400'} mr-2`} />
               <Text className="text-white font-semibold text-lg">
@@ -540,23 +578,23 @@ export default function AnalysisScreen() {
             </View>
 
             <View className="space-y-3">
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
+              <View className="flex-row justify-between border-b pb-2" style={{ borderColor: isDark ? '#2D2D2D' : '#374151' }}>
                 <Text className="text-gray-400">Steps Today</Text>
                 <Text className="text-white font-semibold">{(wearableData.steps || 0).toLocaleString()}</Text>
               </View>
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
+              <View className="flex-row justify-between border-b pb-2" style={{ borderColor: isDark ? '#2D2D2D' : '#374151' }}>
                 <Text className="text-gray-400">Temperature</Text>
                 <Text className="text-white font-semibold">{(weatherData.temperature || 20).toFixed(1)}°C</Text>
               </View>
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
+              <View className="flex-row justify-between border-b pb-2" style={{ borderColor: isDark ? '#2D2D2D' : '#374151' }}>
                 <Text className="text-gray-400">Humidity</Text>
                 <Text className="text-white font-semibold">{Math.round(weatherData.humidity || 0)}%</Text>
               </View>
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
+              <View className="flex-row justify-between border-b pb-2" style={{ borderColor: isDark ? '#2D2D2D' : '#374151' }}>
                 <Text className="text-gray-400">Barometric Pressure</Text>
                 <Text className="text-white font-semibold">{Math.round(weatherData.pressure || 1013)} hPa</Text>
               </View>
-              <View className="flex-row justify-between border-b border-gray-800 pb-2">
+              <View className="flex-row justify-between border-b pb-2" style={{ borderColor: isDark ? '#2D2D2D' : '#374151' }}>
                 <Text className="text-gray-400">UV Index</Text>
                 <Text className="text-white font-semibold">{(weatherData.uvIndex || 0).toFixed(1)}</Text>
               </View>
