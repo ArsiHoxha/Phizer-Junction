@@ -13,7 +13,7 @@ const DATASET_MODE_KEY = '@health_dataset_mode';
 export type DatasetMode = 'sequential' | 'time-based' | 'random' | 'disabled';
 
 class DatasetService {
-  private currentIndex: number = 0;
+  private currentIndex: number = 60; // START AT HIGH-RISK ENTRY FOR DEMO
   private mode: DatasetMode = 'sequential';
   private startTime: Date | null = null;
 

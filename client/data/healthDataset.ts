@@ -183,21 +183,21 @@ function generateDataPoint(id: number, timestamp: Date, context: any): HealthDat
     hrv -= 5;
   }
   
-  // Calculate migraine risk
+  // Calculate migraine risk (BOOSTED FOR DEMO - more dramatic)
   let migraineRisk = 0;
-  if (hrv < 45) migraineRisk += 30;
-  else if (hrv < 55) migraineRisk += 15;
+  if (hrv < 45) migraineRisk += 35; // Was 30
+  else if (hrv < 55) migraineRisk += 20; // Was 15
   
-  if (stress > 70) migraineRisk += 25;
-  else if (stress > 50) migraineRisk += 12;
+  if (stress > 70) migraineRisk += 30; // Was 25
+  else if (stress > 50) migraineRisk += 18; // Was 12
   
-  if (sleepQuality < 60) migraineRisk += 20;
-  else if (sleepQuality < 70) migraineRisk += 10;
+  if (sleepQuality < 60) migraineRisk += 25; // Was 20
+  else if (sleepQuality < 70) migraineRisk += 15; // Was 10
   
-  if (pressure < 1008) migraineRisk += 15;
-  else if (pressure < 1010) migraineRisk += 8;
+  if (pressure < 1008) migraineRisk += 18; // Was 15
+  else if (pressure < 1010) migraineRisk += 12; // Was 8
   
-  if (screenTimeMinutes > 350) migraineRisk += 10;
+  if (screenTimeMinutes > 350) migraineRisk += 15; // Was 10
   
   migraineRisk = Math.min(100, migraineRisk);
   

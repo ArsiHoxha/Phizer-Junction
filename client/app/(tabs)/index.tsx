@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Dimensions, SafeAreaView, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Dimensions, SafeAreaView, Modal, ActivityIndicator, Alert } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LineChart } from 'react-native-chart-kit';
 import { BarChart } from 'react-native-gifted-charts';
@@ -20,7 +20,7 @@ const { width } = Dimensions.get('window');
 
 export default function DashboardScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState('today');
-  const { latestData, currentRisk, isCollecting } = useDataCollection();
+  const { latestData, currentRisk, isCollecting, useDataset } = useDataCollection();
   const { isDark, colors } = useTheme();
   const { getToken } = useAuth();
   const { user } = useUser();
@@ -669,6 +669,30 @@ export default function DashboardScreen() {
           <Text style={{ color: colors.textSecondary }} className="text-base">
             Thursday, November 14
           </Text>
+          
+          {/* Data Source Indicator */}
+          {latestData?.wearable?.isSimulated !== false && (
+            <TouchableOpacity 
+              onPress={() => {
+                Alert.alert(
+                  "Test Data Active", 
+                  useDataset 
+                    ? "You're viewing realistic test data from a 100-entry medical dataset. Numbers change every 5 seconds to simulate real health patterns.\n\n💡 To use your real health data:\n1. Go to Settings\n2. Connect Apple Health\n3. Turn OFF 'Use Realistic Dataset'"
+                    : "You're viewing simulated health data because no real device is connected.\n\n💡 To use your real health data:\n1. Go to Settings\n2. Connect Apple Health\n3. Grant all permissions",
+                  [{ text: "Got it!" }]
+                );
+              }}
+              className="mt-4 flex-row items-center bg-blue-50 dark:bg-blue-900/20 px-3 py-2.5 rounded-lg"
+            >
+              <Ionicons name="information-circle" size={20} color="#3B82F6" />
+              <Text style={{ color: '#3B82F6' }} className="text-xs ml-2 flex-1 font-medium">
+                {useDataset 
+                  ? "📊 TEST DATA: Using realistic dataset (tap for info)" 
+                  : "🔄 DEMO MODE: Simulated data (tap to learn more)"}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Risk Index Card */}
