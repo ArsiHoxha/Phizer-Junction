@@ -46,7 +46,7 @@ class GeminiRiskService {
       console.warn('⚠️ Gemini API key not found. Risk calculation will return default values.');
     }
     this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
   }
 
   /**
