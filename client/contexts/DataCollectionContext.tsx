@@ -252,7 +252,7 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
         }
       }
       
-      // Calculate risk using Gemini AI 2.0-flash-exp (not random calculations)
+      // Calculate risk using Gemini AI 1.5 Flash (not random calculations)
       console.log('🤖 Calculating migraine risk with Gemini AI...');
       const geminiService = getGeminiRiskService();
       let risk = 0; // Initialize risk variable
