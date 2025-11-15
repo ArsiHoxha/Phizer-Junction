@@ -97,6 +97,17 @@ app.post('/api/onboarding/permissions', requireAuth(), async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
+    // Clean up old trigger values that don't match new enum
+    const validTriggers = [
+      'stress', 'screen_time', 'poor_sleep', 'loud_noise', 'weather', 
+      'hormones', 'caffeine', 'alcohol', 'dehydration', 'bright_light',
+      'strong_smells', 'physical_activity', 'skipped_meals', 'neck_tension'
+    ];
+    
+    if (user.triggers && Array.isArray(user.triggers)) {
+      user.triggers = user.triggers.filter(trigger => validTriggers.includes(trigger));
+    }
+
     user.permissions = permissions;
     await user.save();
 
@@ -116,6 +127,16 @@ app.post('/api/onboarding/profile', requireAuth(), async (req, res) => {
     const user = await User.findOne({ clerkId: userId });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Clean up old trigger values
+    const validTriggers = [
+      'stress', 'screen_time', 'poor_sleep', 'loud_noise', 'weather', 
+      'hormones', 'caffeine', 'alcohol', 'dehydration', 'bright_light',
+      'strong_smells', 'physical_activity', 'skipped_meals', 'neck_tension'
+    ];
+    if (user.triggers && Array.isArray(user.triggers)) {
+      user.triggers = user.triggers.filter(trigger => validTriggers.includes(trigger));
     }
 
     if (gender) user.gender = gender;
@@ -145,6 +166,16 @@ app.post('/api/onboarding/menstrual-tracking', requireAuth(), async (req, res) =
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
+    // Clean up old trigger values
+    const validTriggers = [
+      'stress', 'screen_time', 'poor_sleep', 'loud_noise', 'weather', 
+      'hormones', 'caffeine', 'alcohol', 'dehydration', 'bright_light',
+      'strong_smells', 'physical_activity', 'skipped_meals', 'neck_tension'
+    ];
+    if (user.triggers && Array.isArray(user.triggers)) {
+      user.triggers = user.triggers.filter(trigger => validTriggers.includes(trigger));
+    }
+
     user.menstrualTracking = {
       enabled: enabled || false,
       cycleLength: cycleLength || 28,
@@ -169,6 +200,16 @@ app.post('/api/onboarding/data-source', requireAuth(), async (req, res) => {
     const user = await User.findOne({ clerkId: userId });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Clean up old trigger values
+    const validTriggers = [
+      'stress', 'screen_time', 'poor_sleep', 'loud_noise', 'weather', 
+      'hormones', 'caffeine', 'alcohol', 'dehydration', 'bright_light',
+      'strong_smells', 'physical_activity', 'skipped_meals', 'neck_tension'
+    ];
+    if (user.triggers && Array.isArray(user.triggers)) {
+      user.triggers = user.triggers.filter(trigger => validTriggers.includes(trigger));
     }
 
     user.dataSource = { mode, wearableType };

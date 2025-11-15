@@ -25,14 +25,20 @@ export default function TriggerPersonalizationScreen() {
 
   const [frequency, setFrequency] = useState<string>('');
   const [triggers, setTriggers] = useState<Trigger[]>([
-    { id: 'stress', name: 'Stress', selected: false },
-    { id: 'screen', name: 'Screen Time', selected: false },
-    { id: 'sleep', name: 'Poor Sleep', selected: false },
-    { id: 'noise', name: 'Loud Noise', selected: false },
+    { id: 'stress', name: 'Stress & Anxiety', selected: false },
+    { id: 'screen_time', name: 'Screen Time', selected: false },
+    { id: 'poor_sleep', name: 'Poor Sleep', selected: false },
+    { id: 'loud_noise', name: 'Loud Noise', selected: false },
     { id: 'weather', name: 'Weather Changes', selected: false },
-    { id: 'hormones', name: 'Hormonal', selected: false },
-    { id: 'food', name: 'Food & Drink', selected: false },
-    { id: 'light', name: 'Bright Light', selected: false },
+    { id: 'hormones', name: 'Hormonal Changes', selected: false },
+    { id: 'caffeine', name: 'Caffeine', selected: false },
+    { id: 'alcohol', name: 'Alcohol', selected: false },
+    { id: 'dehydration', name: 'Dehydration', selected: false },
+    { id: 'bright_light', name: 'Bright Light', selected: false },
+    { id: 'strong_smells', name: 'Strong Smells', selected: false },
+    { id: 'physical_activity', name: 'Physical Activity', selected: false },
+    { id: 'skipped_meals', name: 'Skipped Meals', selected: false },
+    { id: 'neck_tension', name: 'Neck/Shoulder Tension', selected: false },
   ]);
 
   const frequencies = [
@@ -173,10 +179,8 @@ export default function TriggerPersonalizationScreen() {
               .filter(t => t.selected)
               .map(t => t.id);
             
-            saveTriggers({
-              frequency,
-              triggers: selectedTriggers,
-            });
+            // Updated to match new context signature (just array of trigger IDs)
+            saveTriggers(selectedTriggers);
             
             router.push('/onboarding/dashboard-intro');
           }}
