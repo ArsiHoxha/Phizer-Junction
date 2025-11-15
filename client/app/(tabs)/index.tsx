@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Dimensions, SafeAreaView, Modal, ActivityIndicator } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { LineChart, BarChart } from 'react-native-chart-kit';
+import { LineChart } from 'react-native-chart-kit';
+import { BarChart } from 'react-native-gifted-charts';
 import { CircularProgress } from 'react-native-circular-progress';
 import { useDataCollection } from '../../contexts/DataCollectionContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -10,6 +11,8 @@ import axios from 'axios';
 import { useAuth } from '@clerk/clerk-expo';
 import { BACKEND_URL } from '../../config/config';
 import { Audio } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NotificationService } from '../../services/notificationService';
 
 const { width } = Dimensions.get('window');
 
@@ -26,8 +29,86 @@ export default function DashboardScreen() {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   
+  // Water and Coffee Intake
+  const [waterIntake, setWaterIntake] = useState(0); // glasses
+  const [coffeeIntake, setCoffeeIntake] = useState(0); // cups
+  
   // Historical data for charts (last 7 data points)
   const [historicalData, setHistoricalData] = useState<any[]>([]);
+
+  // Load intake data and request permissions on mount
+  useEffect(() => {
+    loadIntakeData();
+    requestNotificationPermissions();
+  }, []);
+
+  // Check risk level and send notifications
+  useEffect(() => {
+    if (currentRisk >= 30) {
+      NotificationService.checkAndNotifyRiskLevel(currentRisk);
+    }
+  }, [currentRisk]);
+
+  const requestNotificationPermissions = async () => {
+    await NotificationService.requestPermissions();
+  };
+
+  const loadIntakeData = async () => {
+    try {
+      const today = new Date().toDateString();
+      const savedWater = await AsyncStorage.getItem(`water_${today}`);
+      const savedCoffee = await AsyncStorage.getItem(`coffee_${today}`);
+      
+      if (savedWater) setWaterIntake(parseInt(savedWater));
+      if (savedCoffee) setCoffeeIntake(parseInt(savedCoffee));
+    } catch (error) {
+      console.error('Error loading intake data:', error);
+    }
+  };
+
+  const saveIntakeData = async (type: 'water' | 'coffee', value: number) => {
+    try {
+      const today = new Date().toDateString();
+      await AsyncStorage.setItem(`${type}_${today}`, value.toString());
+      
+      // Send notification reminders
+      if (type === 'water' && value < 2) {
+        NotificationService.sendReminderNotification('water', value);
+      } else if (type === 'coffee' && value >= 3) {
+        NotificationService.sendReminderNotification('coffee', value);
+      }
+    } catch (error) {
+      console.error('Error saving intake data:', error);
+    }
+  };
+
+  const incrementWater = () => {
+    const newValue = waterIntake + 1;
+    setWaterIntake(newValue);
+    saveIntakeData('water', newValue);
+  };
+
+  const decrementWater = () => {
+    if (waterIntake > 0) {
+      const newValue = waterIntake - 1;
+      setWaterIntake(newValue);
+      saveIntakeData('water', newValue);
+    }
+  };
+
+  const incrementCoffee = () => {
+    const newValue = coffeeIntake + 1;
+    setCoffeeIntake(newValue);
+    saveIntakeData('coffee', newValue);
+  };
+
+  const decrementCoffee = () => {
+    if (coffeeIntake > 0) {
+      const newValue = coffeeIntake - 1;
+      setCoffeeIntake(newValue);
+      saveIntakeData('coffee', newValue);
+    }
+  };
 
   useEffect(() => {
     if (latestData?.wearable) {
@@ -197,6 +278,35 @@ export default function DashboardScreen() {
     };
   };
 
+  // Generate stacked bar chart data for Risk Index
+  const getStackedBarData = () => {
+    if (historicalData.length < 2) {
+      return [
+        { stacks: [{ value: 20, color: '#3B82F6' }, { value: 15, color: '#EF4444' }], label: '1' },
+        { stacks: [{ value: 25, color: '#3B82F6' }, { value: 10, color: '#EF4444' }], label: '2' },
+        { stacks: [{ value: 18, color: '#3B82F6' }, { value: 22, color: '#EF4444' }], label: '3' },
+        { stacks: [{ value: 30, color: '#3B82F6' }, { value: 12, color: '#EF4444' }], label: '4' },
+      ];
+    }
+
+    const dataPoints = historicalData.slice(-6); // Last 6 points
+    return dataPoints.map((d, i) => {
+      // Split risk into components: HRV impact (blue) and Stress impact (red/orange)
+      const hrvImpact = Math.max(0, (100 - d.hrv) / 2); // Lower HRV = higher impact
+      const stressImpact = d.stress / 2; // Higher stress = higher impact
+      const sleepImpact = Math.max(0, (100 - d.sleepQuality) / 3);
+      
+      return {
+        stacks: [
+          { value: Math.round(hrvImpact), color: '#3B82F6' }, // Blue for HRV
+          { value: Math.round(stressImpact), color: '#F59E0B' }, // Orange for stress
+          { value: Math.round(sleepImpact), color: '#EF4444' }, // Red for sleep
+        ],
+        label: `${i + 1}`,
+      };
+    });
+  };
+
   // Fetch AI Analysis
   const fetchAIAnalysis = async () => {
     setLoadingAI(true);
@@ -356,38 +466,48 @@ export default function DashboardScreen() {
                 borderTopColor: isDark ? '#2D2D2D' : '#3D3D3D',
                 paddingTop: 16 
               }}>
-                <LineChart
-                  data={getChartData()}
-                  width={width - 100}
-                  height={100}
-                  chartConfig={{
-                    backgroundColor: isDark ? '#000000' : '#1A1A1A',
-                    backgroundGradientFrom: isDark ? '#000000' : '#1A1A1A',
-                    backgroundGradientTo: isDark ? '#000000' : '#1A1A1A',
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                    labelColor: (opacity = 1) => isDark ? `rgba(156, 163, 175, ${opacity})` : `rgba(209, 213, 219, ${opacity})`,
-                    style: {
-                      borderRadius: 16
-                    },
-                    propsForDots: {
-                      r: "4",
-                      strokeWidth: "2",
-                      stroke: "#fff"
-                    }
-                  }}
-                  bezier
-                  style={{
-                    marginLeft: -20,
-                    borderRadius: 16
-                  }}
-                  withInnerLines={false}
-                  withOuterLines={false}
+                <BarChart
+                  data={getStackedBarData()}
+                  barWidth={28}
+                  spacing={24}
+                  noOfSections={4}
+                  barBorderRadius={4}
+                  stackData={getStackedBarData()}
+                  xAxisThickness={0}
+                  yAxisThickness={0}
+                  yAxisTextStyle={{ color: isDark ? '#9CA3AF' : '#D1D5DB', fontSize: 10 }}
+                  xAxisLabelTextStyle={{ color: isDark ? '#9CA3AF' : '#D1D5DB', fontSize: 10 }}
+                  hideRules
+                  backgroundColor={isDark ? '#000000' : '#1A1A1A'}
+                  showGradient={false}
+                  rotateLabel={false}
+                  width={width - 130}
+                  height={120}
                 />
+                
+                {/* Legend */}
+                <View className="flex-row justify-center mt-4 space-x-4">
+                  <View className="flex-row items-center">
+                    <View className="w-3 h-3 rounded-full bg-blue-500 mr-1" />
+                    <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs">HRV</Text>
+                  </View>
+                  <View className="flex-row items-center">
+                    <View className="w-3 h-3 rounded-full bg-orange-500 mr-1" />
+                    <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs">Stress</Text>
+                  </View>
+                  <View className="flex-row items-center">
+                    <View className="w-3 h-3 rounded-full bg-red-500 mr-1" />
+                    <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs">Sleep</Text>
+                  </View>
+                </View>
               </View>
             ) : (
-              <View className="border-t border-gray-800 pt-4">
-                <Text className="text-gray-500 text-sm text-center">
+              <View style={{ 
+                borderTopWidth: 1, 
+                borderTopColor: isDark ? '#2D2D2D' : '#3D3D3D',
+                paddingTop: 16 
+              }}>
+                <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-sm text-center">
                   Collecting data... Check back in a few minutes
                 </Text>
               </View>
@@ -496,6 +616,112 @@ export default function DashboardScreen() {
                 </View>
               );
             })}
+          </View>
+        </Animated.View>
+
+        {/* Water & Coffee Intake */}
+        <Animated.View 
+          entering={FadeInUp.duration(600).delay(350)}
+          className="px-6 mb-6"
+        >
+          <Text style={{ color: colors.text }} className="text-xl font-semibold mb-4">
+            Daily Intake Tracker
+          </Text>
+          
+          <View className="flex-row space-x-3">
+            {/* Water Intake */}
+            <View className="flex-1">
+              <View style={{ 
+                backgroundColor: isDark ? '#000000' : colors.card,
+                borderColor: isDark ? '#2D2D2D' : colors.border,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: isDark ? 0.3 : 0.1,
+                shadowRadius: 4,
+                elevation: 3,
+              }} className="rounded-2xl p-4 border">
+                <View className="items-center mb-3">
+                  <Ionicons name="water" size={32} color="#3B82F6" />
+                  <Text style={{ color: colors.text }} className="text-sm font-semibold mt-2">Water</Text>
+                </View>
+                
+                <View className="flex-row items-center justify-between mb-3">
+                  <TouchableOpacity 
+                    onPress={decrementWater}
+                    style={{ backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6' }}
+                    className="w-10 h-10 rounded-full items-center justify-center"
+                  >
+                    <Ionicons name="remove" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                  
+                  <View className="items-center">
+                    <Text style={{ color: colors.text }} className="text-3xl font-bold">{waterIntake}</Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-xs">glasses</Text>
+                  </View>
+                  
+                  <TouchableOpacity 
+                    onPress={incrementWater}
+                    style={{ backgroundColor: '#3B82F6' }}
+                    className="w-10 h-10 rounded-full items-center justify-center"
+                  >
+                    <Ionicons name="add" size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={{ backgroundColor: isDark ? '#1a1a1a' : '#f0f9ff' }} className="rounded-xl p-2">
+                  <Text style={{ color: waterIntake >= 8 ? '#22C55E' : '#3B82F6' }} className="text-xs text-center font-medium">
+                    {waterIntake >= 8 ? '✓ Goal Reached!' : `Goal: 8 glasses`}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Coffee Intake */}
+            <View className="flex-1">
+              <View style={{ 
+                backgroundColor: isDark ? '#000000' : colors.card,
+                borderColor: isDark ? '#2D2D2D' : colors.border,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: isDark ? 0.3 : 0.1,
+                shadowRadius: 4,
+                elevation: 3,
+              }} className="rounded-2xl p-4 border">
+                <View className="items-center mb-3">
+                  <Ionicons name="cafe" size={32} color="#92400E" />
+                  <Text style={{ color: colors.text }} className="text-sm font-semibold mt-2">Coffee</Text>
+                </View>
+                
+                <View className="flex-row items-center justify-between mb-3">
+                  <TouchableOpacity 
+                    onPress={decrementCoffee}
+                    style={{ backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6' }}
+                    className="w-10 h-10 rounded-full items-center justify-center"
+                  >
+                    <Ionicons name="remove" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                  
+                  <View className="items-center">
+                    <Text style={{ color: colors.text }} className="text-3xl font-bold">{coffeeIntake}</Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-xs">cups</Text>
+                  </View>
+                  
+                  <TouchableOpacity 
+                    onPress={incrementCoffee}
+                    style={{ backgroundColor: '#92400E' }}
+                    className="w-10 h-10 rounded-full items-center justify-center"
+                  >
+                    <Ionicons name="add" size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={{ backgroundColor: isDark ? '#1a1a1a' : '#fef3c7' }} className="rounded-xl p-2">
+                  <Text style={{ color: coffeeIntake >= 3 ? '#EF4444' : '#92400E' }} className="text-xs text-center font-medium">
+                    {coffeeIntake >= 3 ? '⚠️ High Intake' : `Limit: 2-3 cups`}
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
         </Animated.View>
 

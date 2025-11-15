@@ -367,17 +367,38 @@ app.post('/api/metrics/wearable', requireAuth(), async (req, res) => {
       sleepQuality,
     });
     
+    // Determine risk level based on score
+    let riskLevel = 'low';
+    if (riskScore >= 70) riskLevel = 'high';
+    else if (riskScore >= 40) riskLevel = 'medium';
+    
     // Save risk history
     const riskHistory = new RiskHistory({
       userId,
       clerkId: userId,
-      riskScore,
+      riskIndex: riskScore,
+      riskLevel: riskLevel,
       timestamp: new Date(),
-      factors: {
-        hrv: hrv < 40 ? 'High' : hrv < 55 ? 'Medium' : 'Low',
-        heartRate: heartRate > 85 ? 'High' : 'Normal',
-        stress: stress > 70 ? 'High' : stress > 40 ? 'Medium' : 'Low',
-        sleep: sleepQuality < 50 ? 'Poor' : sleepQuality < 70 ? 'Fair' : 'Good',
+      contributingFactors: [
+        {
+          name: 'HRV',
+          impact: hrv < 40 ? 90 : hrv < 55 ? 60 : 30,
+          icon: '❤️'
+        },
+        {
+          name: 'Stress',
+          impact: stress > 70 ? 90 : stress > 40 ? 60 : 30,
+          icon: '😰'
+        },
+        {
+          name: 'Sleep Quality',
+          impact: sleepQuality < 50 ? 90 : sleepQuality < 70 ? 60 : 30,
+          icon: '😴'
+        },
+      ],
+      metricsSnapshot: {
+        hrv,
+        stressLevel: stress > 70 ? 'High' : stress > 40 ? 'Medium' : 'Low',
       },
     });
     
