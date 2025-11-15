@@ -107,6 +107,59 @@ app.post('/api/onboarding/permissions', requireAuth(), async (req, res) => {
   }
 });
 
+// Save profile (gender, age)
+app.post('/api/onboarding/profile', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { gender, age } = req.body;
+
+    const user = await User.findOne({ clerkId: userId });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (gender) user.gender = gender;
+    if (age) {
+      user.age = age;
+      // Calculate date of birth based on age
+      const birthYear = new Date().getFullYear() - age;
+      user.dateOfBirth = new Date(birthYear, 0, 1);
+    }
+    await user.save();
+
+    res.status(200).json({ success: true, user });
+  } catch (error) {
+    console.error('Error saving profile:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Save menstrual tracking
+app.post('/api/onboarding/menstrual-tracking', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { enabled, cycleLength, lastPeriodDate } = req.body;
+
+    const user = await User.findOne({ clerkId: userId });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    user.menstrualTracking = {
+      enabled: enabled || false,
+      cycleLength: cycleLength || 28,
+      lastPeriodDate: lastPeriodDate ? new Date(lastPeriodDate) : null,
+      trackingStartDate: enabled ? new Date() : null,
+    };
+    await user.save();
+
+    res.status(200).json({ success: true, user });
+  } catch (error) {
+    console.error('Error saving menstrual tracking:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Save data source
 app.post('/api/onboarding/data-source', requireAuth(), async (req, res) => {
   try {
@@ -132,15 +185,14 @@ app.post('/api/onboarding/data-source', requireAuth(), async (req, res) => {
 app.post('/api/onboarding/triggers', requireAuth(), async (req, res) => {
   try {
     const { userId } = req.auth;
-    const { frequency, triggers } = req.body;
+    const { triggers } = req.body;
 
     const user = await User.findOne({ clerkId: userId });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    user.migraineFrequency = frequency;
-    user.triggers = triggers;
+    user.triggers = triggers || [];
     await user.save();
 
     res.status(200).json({ success: true, user });

@@ -43,11 +43,17 @@ export default function DashboardIntroScreen() {
       if (onboardingData.permissions) {
         await onboardingAPI.savePermissions(onboardingData.permissions);
       }
-      if (onboardingData.dataSource) {
-        await onboardingAPI.saveDataSource(onboardingData.dataSource);
+      if (onboardingData.profile) {
+        await onboardingAPI.saveProfile(onboardingData.profile);
+      }
+      if (onboardingData.menstrualTracking) {
+        await onboardingAPI.saveMenstrualTracking(onboardingData.menstrualTracking);
       }
       if (onboardingData.triggers) {
         await onboardingAPI.saveTriggers(onboardingData.triggers);
+      }
+      if (onboardingData.dataSource) {
+        await onboardingAPI.saveDataSource(onboardingData.dataSource);
       }
       
       // Mark onboarding as complete

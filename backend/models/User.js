@@ -13,6 +13,22 @@ const userSchema = new mongoose.Schema({
   firstName: String,
   lastName: String,
   
+  // Personal Information
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'other', 'prefer-not-to-say'],
+  },
+  dateOfBirth: Date,
+  age: Number,
+  
+  // Menstrual Tracking (for female users)
+  menstrualTracking: {
+    enabled: { type: Boolean, default: false },
+    cycleLength: { type: Number, default: 28 }, // Average cycle length in days
+    lastPeriodDate: Date,
+    trackingStartDate: Date,
+  },
+  
   // Onboarding Data
   onboardingCompleted: {
     type: Boolean,

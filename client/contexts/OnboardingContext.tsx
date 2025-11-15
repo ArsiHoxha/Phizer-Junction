@@ -4,24 +4,31 @@ interface OnboardingData {
   permissions?: {
     notifications: boolean;
     passiveData: boolean;
-    calendar: boolean;
     location: boolean;
   };
+  profile?: {
+    gender?: 'male' | 'female' | 'other' | 'prefer-not-to-say';
+    age?: number;
+  };
+  menstrualTracking?: {
+    enabled: boolean;
+    cycleLength?: number;
+    lastPeriodDate?: string;
+  };
+  triggers?: string[];
   dataSource?: {
     mode: 'phone' | 'wearable';
     wearableType?: string;
-  };
-  triggers?: {
-    frequency: string;
-    triggers: string[];
   };
 }
 
 interface OnboardingContextType {
   onboardingData: OnboardingData;
   setPermissions: (permissions: OnboardingData['permissions']) => void;
+  setProfile: (profile: OnboardingData['profile']) => void;
+  setMenstrualTracking: (menstrualTracking: OnboardingData['menstrualTracking']) => void;
+  setTriggers: (triggers: string[]) => void;
   setDataSource: (dataSource: OnboardingData['dataSource']) => void;
-  setTriggers: (triggers: OnboardingData['triggers']) => void;
   clearOnboardingData: () => void;
 }
 
@@ -34,12 +41,20 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     setOnboardingData(prev => ({ ...prev, permissions }));
   };
 
-  const setDataSource = (dataSource: OnboardingData['dataSource']) => {
-    setOnboardingData(prev => ({ ...prev, dataSource }));
+  const setProfile = (profile: OnboardingData['profile']) => {
+    setOnboardingData(prev => ({ ...prev, profile }));
   };
 
-  const setTriggers = (triggers: OnboardingData['triggers']) => {
+  const setMenstrualTracking = (menstrualTracking: OnboardingData['menstrualTracking']) => {
+    setOnboardingData(prev => ({ ...prev, menstrualTracking }));
+  };
+
+  const setTriggers = (triggers: string[]) => {
     setOnboardingData(prev => ({ ...prev, triggers }));
+  };
+
+  const setDataSource = (dataSource: OnboardingData['dataSource']) => {
+    setOnboardingData(prev => ({ ...prev, dataSource }));
   };
 
   const clearOnboardingData = () => {
@@ -51,8 +66,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       value={{
         onboardingData,
         setPermissions,
-        setDataSource,
+        setProfile,
+        setMenstrualTracking,
         setTriggers,
+        setDataSource,
         clearOnboardingData,
       }}
     >

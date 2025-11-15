@@ -13,6 +13,7 @@ import { BACKEND_URL } from '../../config/config';
 import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NotificationService } from '../../services/notificationService';
+import WidgetDataService from '../../services/widgetDataService';
 
 const { width } = Dimensions.get('window');
 
@@ -48,6 +49,26 @@ export default function DashboardScreen() {
       NotificationService.checkAndNotifyRiskLevel(currentRisk);
     }
   }, [currentRisk]);
+
+  // Update widget data when risk changes
+  useEffect(() => {
+    const updateWidget = async () => {
+      try {
+        const widgetData = WidgetDataService.formatForWidget(
+          currentRisk,
+          [], // triggers will be added when we have them
+          latestData?.wearable || {}
+        );
+        await WidgetDataService.updateWidgetData(widgetData);
+      } catch (error) {
+        console.error('Error updating widget:', error);
+      }
+    };
+    
+    if (currentRisk >= 0) {
+      updateWidget();
+    }
+  }, [currentRisk, latestData?.wearable]);
 
   const requestNotificationPermissions = async () => {
     await NotificationService.requestPermissions();

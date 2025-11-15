@@ -39,13 +39,23 @@ export const onboardingAPI = {
     return response.data;
   },
   
-  saveDataSource: async (data: { mode: string; wearableType?: string }) => {
-    const response = await api.post('/onboarding/data-source', data);
+  saveProfile: async (profile: { gender?: string; age?: number }) => {
+    const response = await api.post('/onboarding/profile', profile);
+    return response.data;
+  },
+
+  saveMenstrualTracking: async (menstrualTracking: { enabled: boolean; cycleLength?: number; lastPeriodDate?: string }) => {
+    const response = await api.post('/onboarding/menstrual-tracking', menstrualTracking);
     return response.data;
   },
   
-  saveTriggers: async (data: { frequency: string; triggers: string[] }) => {
-    const response = await api.post('/onboarding/triggers', data);
+  saveTriggers: async (triggers: string[]) => {
+    const response = await api.post('/onboarding/triggers', { triggers });
+    return response.data;
+  },
+  
+  saveDataSource: async (data: { mode: string; wearableType?: string }) => {
+    const response = await api.post('/onboarding/data-source', data);
     return response.data;
   },
   

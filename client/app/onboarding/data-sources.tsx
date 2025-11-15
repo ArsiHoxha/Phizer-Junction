@@ -166,7 +166,7 @@ export default function DataSourcesScreen() {
               wearableType: selectedMode === 'wearable' ? wearableType || undefined : undefined,
             });
             
-            router.push('/onboarding/trigger-personalization');
+            router.push('/onboarding/dashboard-intro');
           }}
           disabled={!selectedMode}
           className={`rounded-full py-5 mb-3 ${

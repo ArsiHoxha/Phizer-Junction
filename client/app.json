@@ -9,7 +9,17 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.phizerjunction.migraine",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "This app displays your health metrics to help predict migraine risk.",
+        "NSHealthUpdateUsageDescription": "This app updates health data to improve migraine predictions."
+      },
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.phizerjunction.migraine"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {

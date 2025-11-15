@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
@@ -16,6 +16,8 @@ import { getCalendarIntegration } from '../services/collectors/calendar';
 import { setAuthToken } from '../services/api';
 import axios from 'axios';
 import { BACKEND_URL } from '../config/config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import AppleHealthService from '../services/appleHealthService';
 
 const WEARABLE_TASK = 'wearable-data-collection';
 const PHONE_TASK = 'phone-data-collection';
@@ -101,6 +103,7 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
 
   /**
    * Collect wearable data (every 5 seconds for real-time updates)
+   * Merges Apple Health data if available and connected
    */
   const collectWearableData = async () => {
     try {
@@ -108,18 +111,40 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
       const data = simulator.getCurrentData();
       const risk = simulator.getCurrentRisk();
       
+      // Check if Apple Health is connected and fetch real data
+      let mergedData = { ...data };
+      if (Platform.OS === 'ios') {
+        const appleHealthConnected = await AsyncStorage.getItem('apple_health_connected');
+        if (appleHealthConnected === 'true') {
+          try {
+            const healthMetrics = await AppleHealthService.getLatestMetrics();
+            // Merge Apple Health data, preferring real data over simulated
+            if (healthMetrics.heartRate) mergedData.heartRate = healthMetrics.heartRate;
+            if (healthMetrics.hrv) mergedData.hrv = healthMetrics.hrv;
+            if (healthMetrics.steps !== undefined) mergedData.steps = healthMetrics.steps;
+            if (healthMetrics.sleepQuality) mergedData.sleepQuality = healthMetrics.sleepQuality;
+            // Mark as real data when available
+            if (healthMetrics.heartRate || healthMetrics.hrv) {
+              mergedData.isSimulated = false;
+            }
+          } catch (error) {
+            console.error('Error fetching Apple Health data:', error);
+          }
+        }
+      }
+      
       setCurrentRisk(Math.round(risk));
-      setLatestData((prev: any) => ({ ...prev, wearable: data }));
+      setLatestData((prev: any) => ({ ...prev, wearable: mergedData }));
       
       // Send to backend every minute (not every 5 seconds to reduce load)
       if (Date.now() % 60000 < 5000) {
         await sendToBackend('/api/metrics/wearable', {
-          hrv: data.hrv,
-          heartRate: data.heartRate,
-          stress: data.stress,
-          sleepQuality: data.sleepQuality,
-          steps: data.steps,
-          isSimulated: data.isSimulated,
+          hrv: mergedData.hrv,
+          heartRate: mergedData.heartRate,
+          stress: mergedData.stress,
+          sleepQuality: mergedData.sleepQuality,
+          steps: mergedData.steps,
+          isSimulated: mergedData.isSimulated,
         });
       }
     } catch (error) {
