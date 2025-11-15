@@ -56,7 +56,22 @@ const userSchema = new mongoose.Schema({
   },
   triggers: [{
     type: String,
-    enum: ['stress', 'screen', 'sleep', 'noise', 'weather', 'hormones', 'food', 'light'],
+    enum: [
+      'stress',
+      'screen_time',
+      'poor_sleep',
+      'loud_noise',
+      'weather',
+      'hormones',
+      'caffeine',
+      'alcohol',
+      'dehydration',
+      'bright_light',
+      'strong_smells',
+      'physical_activity',
+      'skipped_meals',
+      'neck_tension'
+    ],
   }],
   
   // Baseline Metrics (for comparison)

@@ -8,12 +8,13 @@ import { useDataCollection } from '../../contexts/DataCollectionContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import axios from 'axios';
-import { useAuth } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import { BACKEND_URL } from '../../config/config';
 import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NotificationService } from '../../services/notificationService';
 import WidgetDataService from '../../services/widgetDataService';
+import { userAPI, setAuthToken } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -22,6 +23,7 @@ export default function DashboardScreen() {
   const { latestData, currentRisk, isCollecting } = useDataCollection();
   const { isDark, colors } = useTheme();
   const { getToken } = useAuth();
+  const { user } = useUser();
   
   // AI Recommendations Modal State
   const [showAIModal, setShowAIModal] = useState(false);
@@ -30,6 +32,9 @@ export default function DashboardScreen() {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   
+  // Triggers Modal State
+  const [showTriggersModal, setShowTriggersModal] = useState(false);
+  
   // Water and Coffee Intake
   const [waterIntake, setWaterIntake] = useState(0); // glasses
   const [coffeeIntake, setCoffeeIntake] = useState(0); // cups
@@ -37,10 +42,15 @@ export default function DashboardScreen() {
   // Historical data for charts (last 7 data points)
   const [historicalData, setHistoricalData] = useState<any[]>([]);
 
+  // User triggers from onboarding
+  const [userTriggers, setUserTriggers] = useState<string[]>([]);
+  const [loadingTriggers, setLoadingTriggers] = useState(true);
+
   // Load intake data and request permissions on mount
   useEffect(() => {
     loadIntakeData();
     requestNotificationPermissions();
+    loadUserTriggers();
   }, []);
 
   // Check risk level and send notifications
@@ -72,6 +82,24 @@ export default function DashboardScreen() {
 
   const requestNotificationPermissions = async () => {
     await NotificationService.requestPermissions();
+  };
+
+  const loadUserTriggers = async () => {
+    try {
+      if (!user?.id) return;
+      
+      const token = await getToken();
+      setAuthToken(token);
+      
+      const userData = await userAPI.getProfile(user.id);
+      if (userData && userData.user && userData.user.triggers) {
+        setUserTriggers(userData.user.triggers);
+      }
+    } catch (error) {
+      console.error('Error loading user triggers:', error);
+    } finally {
+      setLoadingTriggers(false);
+    }
   };
 
   const loadIntakeData = async () => {
@@ -148,6 +176,24 @@ export default function DashboardScreen() {
       });
     }
   }, [latestData, currentRisk]);
+
+  // Trigger metadata for display
+  const triggerMetadata: { [key: string]: { name: string; icon: string; color: string } } = {
+    stress: { name: 'Stress & Anxiety', icon: 'alert-circle', color: '#EF4444' },
+    screen_time: { name: 'Screen Time', icon: 'phone-portrait', color: '#8B5CF6' },
+    poor_sleep: { name: 'Poor Sleep', icon: 'moon', color: '#3B82F6' },
+    loud_noise: { name: 'Loud Noise', icon: 'volume-high', color: '#F59E0B' },
+    weather: { name: 'Weather Changes', icon: 'cloud', color: '#06B6D4' },
+    hormones: { name: 'Hormonal Changes', icon: 'fitness', color: '#EC4899' },
+    caffeine: { name: 'Caffeine', icon: 'cafe', color: '#78350F' },
+    alcohol: { name: 'Alcohol', icon: 'wine', color: '#DC2626' },
+    dehydration: { name: 'Dehydration', icon: 'water', color: '#0EA5E9' },
+    bright_light: { name: 'Bright Light', icon: 'sunny', color: '#FBBF24' },
+    strong_smells: { name: 'Strong Smells', icon: 'flower', color: '#A855F7' },
+    physical_activity: { name: 'Physical Activity', icon: 'barbell', color: '#10B981' },
+    skipped_meals: { name: 'Skipped Meals', icon: 'restaurant', color: '#F97316' },
+    neck_tension: { name: 'Neck/Shoulder Tension', icon: 'body', color: '#6366F1' },
+  };
 
   // Calculate dynamic metrics from real data
   const wearableData = latestData?.wearable || {
@@ -564,9 +610,27 @@ export default function DashboardScreen() {
           entering={FadeInUp.duration(600).delay(200)}
           className="px-6 mb-6"
         >
-          <Text style={{ color: colors.text }} className="text-lg font-bold mb-3">
-            Today's Metrics
-          </Text>
+          <View className="flex-row items-center justify-between mb-3">
+            <Text style={{ color: colors.text }} className="text-lg font-bold">
+              Today's Metrics
+            </Text>
+            {!loadingTriggers && userTriggers.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setShowTriggersModal(true)}
+                style={{ 
+                  backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6',
+                  borderColor: isDark ? '#2D2D2D' : colors.border,
+                }}
+                className="flex-row items-center px-3 py-1.5 rounded-full border"
+                activeOpacity={0.7}
+              >
+                <Ionicons name="list" size={14} color={colors.text} />
+                <Text style={{ color: colors.text }} className="text-xs font-semibold ml-1.5">
+                  {userTriggers.length} Tracked
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
           
           <View className="flex-row justify-between">
             {metrics.map((metric, index) => {
@@ -942,6 +1006,97 @@ export default function DashboardScreen() {
             }}>
               <TouchableOpacity
                 onPress={() => setShowAIModal(false)}
+                style={{ backgroundColor: isDark ? '#FFFFFF' : colors.primary }}
+                className="rounded-full py-4"
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: isDark ? '#000000' : '#FFFFFF' }} className="text-center font-semibold">Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Tracked Triggers Modal */}
+      <Modal
+        visible={showTriggersModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTriggersModal(false)}
+      >
+        <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ 
+            backgroundColor: isDark ? '#000000' : colors.background,
+            maxHeight: '75%'
+          }} className="rounded-t-3xl p-6">
+            <View className="flex-row items-center justify-between mb-4">
+              <View className="flex-row items-center">
+                <Ionicons name="list-circle" size={28} color={colors.primary} />
+                <Text style={{ color: colors.text }} className="text-xl font-bold ml-2">
+                  Your Tracked Triggers
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowTriggersModal(false)}>
+                <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ color: colors.textSecondary }} className="text-sm mb-4">
+              We're monitoring these {userTriggers.length} trigger{userTriggers.length > 1 ? 's' : ''} to help predict your migraine risk
+            </Text>
+
+            <ScrollView 
+              showsVerticalScrollIndicator={true} 
+              className="flex-1 mb-4"
+            >
+              <View className="flex-row flex-wrap -mx-1.5">
+                {userTriggers.map((triggerId) => {
+                  const trigger = triggerMetadata[triggerId];
+                  if (!trigger) return null;
+                  
+                  return (
+                    <View key={triggerId} className="w-1/2 px-1.5 mb-3">
+                      <View style={{ 
+                        backgroundColor: isDark ? '#1a1a1a' : colors.card,
+                        borderColor: isDark ? '#2D2D2D' : colors.border,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: isDark ? 0.3 : 0.1,
+                        shadowRadius: 3,
+                        elevation: 2,
+                      }} className="rounded-xl p-4 border">
+                        <View 
+                          style={{ backgroundColor: trigger.color + '20' }}
+                          className="w-12 h-12 rounded-full items-center justify-center mb-3"
+                        >
+                          <Ionicons 
+                            name={trigger.icon as any}
+                            size={22} 
+                            color={trigger.color}
+                          />
+                        </View>
+                        <Text 
+                          style={{ color: colors.text }} 
+                          className="text-sm font-semibold"
+                          numberOfLines={2}
+                        >
+                          {trigger.name}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            <View style={{ 
+              backgroundColor: isDark ? '#000000' : colors.background,
+              paddingTop: 12,
+              borderTopWidth: 1,
+              borderTopColor: isDark ? '#2D2D2D' : colors.border
+            }}>
+              <TouchableOpacity
+                onPress={() => setShowTriggersModal(false)}
                 style={{ backgroundColor: isDark ? '#FFFFFF' : colors.primary }}
                 className="rounded-full py-4"
                 activeOpacity={0.8}

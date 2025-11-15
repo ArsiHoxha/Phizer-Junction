@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+ 
+ 
+ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StatusBar, SafeAreaView, Platform, ActivityIndicator } from 'react-native';
 import { useUser, useClerk } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
@@ -180,7 +182,7 @@ export default function SettingsScreen() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      router.replace('/');
+      router.replace('/onboarding/permissions');
     } catch (error) {
       console.error('Error signing out:', error);
     }
