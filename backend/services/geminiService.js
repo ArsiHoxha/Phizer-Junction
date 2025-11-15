@@ -7,9 +7,27 @@ async function analyzeHealthData(healthData) {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
+    // Build trigger analysis section
+    let triggerSection = '';
+    if (healthData.activeTriggers && healthData.activeTriggers.length > 0) {
+      triggerSection = `\nUSER-SELECTED TRIGGERS (From Onboarding):
+${healthData.userTriggers ? healthData.userTriggers.map(t => `- ${t}`).join('\n') : 'None selected'}
+
+ACTIVE TRIGGERS DETECTED NOW:
+${healthData.activeTriggers.map(t => `- ${t.name}: ${t.value} → ${Math.round(t.impact)}% risk impact (${t.type === 'user' ? 'User selected' : 'Core metric'})`).join('\n')}`;
+    }
+
+    // Build intake section
+    let intakeSection = '';
+    if (healthData.intakeData) {
+      intakeSection = `\nDAILY INTAKE:
+- Water: ${healthData.intakeData.water}/8 glasses (${healthData.intakeData.water < 6 ? 'LOW - Dehydration risk!' : 'Good'})
+- Coffee: ${healthData.intakeData.coffee} cups (${healthData.intakeData.coffee >= 3 ? 'HIGH - May trigger migraine!' : 'Moderate'})`;
+    }
+
     const prompt = `You are a medical AI assistant specialized in migraine analysis and prevention. Analyze the following health data and provide personalized insights.
 
-Health Data:
+CORE HEALTH METRICS:
 - HRV (Heart Rate Variability): ${healthData.wearable?.hrv || 'N/A'}ms (Normal: 60-80ms)
 - Heart Rate: ${healthData.wearable?.heartRate || 'N/A'} bpm
 - Stress Level: ${healthData.wearable?.stress || 'N/A'}% (0-100)
@@ -19,37 +37,44 @@ Health Data:
 - Screen Time: ${healthData.phone?.screenTimeMinutes ? (healthData.phone.screenTimeMinutes / 60).toFixed(1) : 'N/A'} hours today
 - Notifications: ${healthData.phone?.notificationCount || 'N/A'}
 - Activity Level: ${healthData.phone?.activityLevel || 'N/A'}
+
+ENVIRONMENTAL DATA:
 - Weather: ${healthData.location?.weather?.temperature?.toFixed(1) || 'N/A'}°C, ${healthData.location?.weather?.humidity?.toFixed(0) || 'N/A'}% humidity
-- Barometric Pressure: ${healthData.location?.weather?.pressure?.toFixed(0) || 'N/A'} hPa
+- Barometric Pressure: ${healthData.location?.weather?.pressure?.toFixed(0) || 'N/A'} hPa (Low pressure < 1010 = migraine trigger!)
 - UV Index: ${healthData.location?.weather?.uvIndex?.toFixed(1) || 'N/A'}
 - Calendar Events Today: ${healthData.calendar?.eventsToday || 'N/A'}
 - Calendar Stress Score: ${healthData.calendar?.stressScore || 'N/A'}%
-- Current Risk Score: ${healthData.currentRisk || 'N/A'}%
+${intakeSection}
+${triggerSection}
+
+CURRENT MIGRAINE RISK: ${healthData.currentRisk || 'N/A'}%
+
+IMPORTANT: Focus your analysis on the USER-SELECTED TRIGGERS and ACTIVE TRIGGERS above. These are the specific migraine triggers this person experiences. Analyze how their current metrics relate to THEIR specific triggers, not generic advice.
 
 Format your response EXACTLY like this with proper structure:
 
 PRIMARY CONCERNS
-• [First concerning metric and why it matters]
-• [Second concerning metric and why it matters]
-• [Third concerning metric if applicable]
+• [First concerning trigger with its VALUE - e.g., "HRV at 42ms (Low)"]
+• [Second concerning trigger with its VALUE]
+• [Third concerning trigger with VALUE if applicable]
 
 ROOT CAUSE ANALYSIS
-• [First identified pattern or cause]
-• [Second identified pattern or cause]
-• [Third pattern if applicable]
+• [How the active triggers are interconnected - mention specific VALUES]
+• [Patterns in user's selected triggers vs current data]
+• [Environmental or lifestyle factors contributing]
 
 IMMEDIATE ACTIONS
-• [First specific action to take now]
-• [Second specific action to take now]
-• [Third specific action to take now]
-• [Fourth action if needed]
+• [First specific action targeting highest-impact user trigger]
+• [Second action for next highest trigger]
+• [Third action addressing environmental factors]
+• [Fourth action for prevention]
 
 PREVENTION TIPS
-• [First long-term lifestyle adjustment]
-• [Second long-term lifestyle adjustment]
-• [Third adjustment if applicable]
+• [Long-term adjustment for user's #1 trigger]
+• [Lifestyle change for user's #2 trigger]
+• [General migraine prevention specific to their pattern]
 
-Keep it concise (max 250 words), empathetic, and actionable. Focus on migraine-specific triggers.`;
+Keep it concise (max 300 words), empathetic, and actionable. Focus on the USER'S SPECIFIC TRIGGERS from onboarding.`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;

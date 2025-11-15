@@ -11,7 +11,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppleHealthService from '../../services/appleHealthService';
 import WidgetDataService from '../../services/widgetDataService';
-import { Linking } from 'react-native';
+import { Linking, Alert } from 'react-native';
+import { exportHealthDatasetToCSV, generateDatasetSummary } from '../../utils/exportDataset';
 
 // Helper Components
 interface MonitoringToggleProps {
@@ -63,12 +64,15 @@ export default function SettingsScreen() {
   const { signOut } = useClerk();
   const router = useRouter();
   const { theme, isDark, colors, setTheme } = useTheme();
-  const { isCollecting } = useDataCollection();
+  const { isCollecting, useDataset, toggleDataset, resetDataset } = useDataCollection();
 
   // Apple Health state
   const [appleHealthConnected, setAppleHealthConnected] = useState(false);
   const [appleHealthLoading, setAppleHealthLoading] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+
+  // Dataset state
+  const [exportingDataset, setExportingDataset] = useState(false);
 
   // Widget state
   const [widgetLastUpdate, setWidgetLastUpdate] = useState<string | null>(null);
@@ -179,6 +183,57 @@ export default function SettingsScreen() {
     return `${diffDays}d ago`;
   };
 
+  const handleExportDataset = async () => {
+    setExportingDataset(true);
+    try {
+      await exportHealthDatasetToCSV();
+      Alert.alert(
+        '✅ Dataset Exported',
+        'The health dataset has been exported to CSV format. You can now review or modify the data.',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Error exporting dataset:', error);
+      Alert.alert('Error', 'Failed to export dataset');
+    } finally {
+      setExportingDataset(false);
+    }
+  };
+
+  const handleViewDatasetInfo = () => {
+    const summary = generateDatasetSummary();
+    Alert.alert('Dataset Information', summary, [{ text: 'OK' }]);
+  };
+
+  const handleToggleDataset = async () => {
+    await toggleDataset();
+    Alert.alert(
+      useDataset ? '✅ Dataset Disabled' : '✅ Dataset Enabled',
+      useDataset 
+        ? 'Now using simulated data generation'
+        : 'Now using realistic pre-generated dataset with medical patterns',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleResetDataset = async () => {
+    Alert.alert(
+      'Reset Dataset?',
+      'This will reset the dataset progression to the beginning.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Reset', 
+          style: 'destructive',
+          onPress: async () => {
+            await resetDataset();
+            Alert.alert('✅ Reset Complete', 'Dataset has been reset to entry #1');
+          }
+        }
+      ]
+    );
+  };
+
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -256,6 +311,120 @@ export default function SettingsScreen() {
               <Text style={{ color: colors.textSecondary }} className="text-xs">
                 {isCollecting ? 'Active' : 'Paused'}
               </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Dataset Section */}
+        <View className="px-6 mb-6">
+          <Text style={{ color: colors.textSecondary }} className="text-xs font-semibold uppercase mb-3">
+            Data Source
+          </Text>
+          
+          <View style={{ 
+            backgroundColor: isDark ? '#000000' : colors.card, 
+            borderColor: isDark ? '#2D2D2D' : colors.border 
+          }} className="rounded-3xl overflow-hidden border">
+            
+            {/* Dataset Toggle */}
+            <TouchableOpacity
+              onPress={handleToggleDataset}
+              className="p-4"
+              activeOpacity={0.7}
+            >
+              <View className="flex-row items-center mb-3">
+                <View style={{ backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6' }} className="w-12 h-12 rounded-2xl items-center justify-center mr-3">
+                  <Ionicons name="document-text" size={24} color={useDataset ? '#10B981' : colors.textSecondary} />
+                </View>
+                <View className="flex-1">
+                  <View className="flex-row items-center">
+                    <Text style={{ color: colors.text }} className="text-base font-semibold">
+                      Realistic Dataset
+                    </Text>
+                    {useDataset && (
+                      <View className="bg-green-100 px-2 py-0.5 rounded-full ml-2">
+                        <Text className="text-green-600 text-[10px] font-semibold">ACTIVE</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={{ color: colors.textSecondary }} className="text-xs">
+                    100 pre-generated health data points
+                  </Text>
+                </View>
+                <View className={`w-11 h-6 rounded-full ${useDataset ? 'bg-green-500' : 'bg-gray-300'} justify-center ${useDataset ? 'items-end' : 'items-start'} px-0.5`}>
+                  <View className="w-5 h-5 rounded-full bg-white shadow-sm" />
+                </View>
+              </View>
+              
+              {/* Dataset Info */}
+              {useDataset && (
+                <View style={{ 
+                  backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6',
+                  borderColor: isDark ? '#2D2D2D' : 'transparent'
+                }} className="rounded-2xl p-3 border">
+                  <Text style={{ color: colors.textSecondary }} className="text-xs mb-2">
+                    ✓ Medical patterns included{'\n'}
+                    ✓ Stress buildup cycles{'\n'}
+                    ✓ Weather-triggered events{'\n'}
+                    ✓ Sleep correlations
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <Divider colors={colors} />
+
+            {/* Dataset Actions */}
+            <View className="p-4">
+              <Text style={{ color: colors.text }} className="text-sm font-semibold mb-3">
+                Dataset Actions
+              </Text>
+              
+              <TouchableOpacity
+                onPress={handleViewDatasetInfo}
+                className="flex-row items-center p-3 rounded-2xl mb-2"
+                style={{ backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6' }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={20} color={colors.primary} />
+                <Text style={{ color: colors.text }} className="text-sm ml-3 flex-1">
+                  View Dataset Info
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleExportDataset}
+                className="flex-row items-center p-3 rounded-2xl mb-2"
+                style={{ backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6' }}
+                activeOpacity={0.7}
+                disabled={exportingDataset}
+              >
+                <Ionicons name="download-outline" size={20} color={colors.primary} />
+                <Text style={{ color: colors.text }} className="text-sm ml-3 flex-1">
+                  {exportingDataset ? 'Exporting...' : 'Export to CSV'}
+                </Text>
+                {exportingDataset ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
+
+              {useDataset && (
+                <TouchableOpacity
+                  onPress={handleResetDataset}
+                  className="flex-row items-center p-3 rounded-2xl"
+                  style={{ backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6' }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="refresh-outline" size={20} color="#EF4444" />
+                  <Text style={{ color: '#EF4444' }} className="text-sm ml-3 flex-1">
+                    Reset Dataset
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>

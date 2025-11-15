@@ -18,8 +18,15 @@ import axios from 'axios';
 import { BACKEND_URL } from '../config/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppleHealthService from '../services/appleHealthService';
+import { getDatasetService } from '../services/datasetService';
+import { NotificationService } from '../services/notificationService';
 
 const WEARABLE_TASK = 'wearable-data-collection';
+const USE_DATASET_KEY = '@use_realistic_dataset';
+const LATEST_DATA_KEY = '@latest_health_data';
+const CURRENT_RISK_KEY = '@current_migraine_risk';
+const LAST_NOTIFICATION_KEY = '@last_notification_time';
+const NOTIFIED_RISK_LEVELS_KEY = '@notified_risk_levels';
 const PHONE_TASK = 'phone-data-collection';
 const WEATHER_TASK = 'weather-data-collection';
 const SLEEP_TASK = 'sleep-data-collection';
@@ -38,6 +45,9 @@ interface DataCollectionContextType {
   startCollection: () => Promise<void>;
   stopCollection: () => void;
   requestPermissions: () => Promise<void>;
+  useDataset: boolean;
+  toggleDataset: () => Promise<void>;
+  resetDataset: () => Promise<void>;
 }
 
 const DataCollectionContext = createContext<DataCollectionContextType | undefined>(undefined);
@@ -55,6 +65,7 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
   const [isCollecting, setIsCollecting] = useState(false);
   const [currentRisk, setCurrentRisk] = useState(34);
   const [latestData, setLatestData] = useState<any>(null);
+  const [useDataset, setUseDataset] = useState(false);
   
   const wearableInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const phoneInterval = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -63,6 +74,89 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
   const calendarInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   
   const appState = useRef(AppState.currentState);
+  const lastNotifiedRisk = useRef<number>(-1);
+
+  // Load persisted data on mount
+  useEffect(() => {
+    loadPersistedData();
+  }, []);
+
+  /**
+   * Load all persisted data from AsyncStorage
+   */
+  const loadPersistedData = async () => {
+    try {
+      // Load dataset preference
+      const datasetPref = await AsyncStorage.getItem(USE_DATASET_KEY);
+      setUseDataset(datasetPref === 'true');
+
+      // Load latest data
+      const savedData = await AsyncStorage.getItem(LATEST_DATA_KEY);
+      if (savedData) {
+        setLatestData(JSON.parse(savedData));
+      }
+
+      // Load current risk
+      const savedRisk = await AsyncStorage.getItem(CURRENT_RISK_KEY);
+      if (savedRisk) {
+        setCurrentRisk(parseInt(savedRisk, 10));
+      }
+
+      // Load last notified risk level
+      const lastNotified = await AsyncStorage.getItem(NOTIFIED_RISK_LEVELS_KEY);
+      if (lastNotified) {
+        lastNotifiedRisk.current = parseInt(lastNotified, 10);
+      }
+
+      console.log('✅ Loaded persisted health data');
+    } catch (error) {
+      console.error('Error loading persisted data:', error);
+    }
+  };
+
+  /**
+   * Persist latest data to AsyncStorage
+   */
+  const persistLatestData = async (data: any) => {
+    try {
+      await AsyncStorage.setItem(LATEST_DATA_KEY, JSON.stringify(data));
+    } catch (error) {
+      console.error('Error persisting latest data:', error);
+    }
+  };
+
+  /**
+   * Persist current risk to AsyncStorage
+   */
+  const persistCurrentRisk = async (risk: number) => {
+    try {
+      await AsyncStorage.setItem(CURRENT_RISK_KEY, risk.toString());
+    } catch (error) {
+      console.error('Error persisting current risk:', error);
+    }
+  };
+
+  /**
+   * Check risk and automatically send notifications
+   */
+  const checkAndNotify = async (risk: number) => {
+    try {
+      // Only notify if risk has significantly changed (by 10+ points) or crossed important thresholds
+      const riskDifference = Math.abs(risk - lastNotifiedRisk.current);
+      const crossedThreshold = 
+        (lastNotifiedRisk.current < 30 && risk >= 30) ||
+        (lastNotifiedRisk.current < 50 && risk >= 50) ||
+        (lastNotifiedRisk.current < 70 && risk >= 70);
+
+      if (riskDifference >= 10 || crossedThreshold) {
+        await NotificationService.checkAndNotifyRiskLevel(risk);
+        lastNotifiedRisk.current = risk;
+        await AsyncStorage.setItem(NOTIFIED_RISK_LEVELS_KEY, risk.toString());
+      }
+    } catch (error) {
+      console.error('Error checking and notifying:', error);
+    }
+  };
 
   /**
    * Request all necessary permissions
@@ -103,38 +197,68 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
 
   /**
    * Collect wearable data (every 5 seconds for real-time updates)
-   * Merges Apple Health data if available and connected
+   * Uses realistic dataset OR merges Apple Health data if available
    */
   const collectWearableData = async () => {
     try {
-      const simulator = getWearableSimulator();
-      const data = simulator.getCurrentData();
-      const risk = simulator.getCurrentRisk();
-      
-      // Check if Apple Health is connected and fetch real data
-      let mergedData = { ...data };
-      if (Platform.OS === 'ios') {
-        const appleHealthConnected = await AsyncStorage.getItem('apple_health_connected');
-        if (appleHealthConnected === 'true') {
-          try {
-            const healthMetrics = await AppleHealthService.getLatestMetrics();
-            // Merge Apple Health data, preferring real data over simulated
-            if (healthMetrics.heartRate) mergedData.heartRate = healthMetrics.heartRate;
-            if (healthMetrics.hrv) mergedData.hrv = healthMetrics.hrv;
-            if (healthMetrics.steps !== undefined) mergedData.steps = healthMetrics.steps;
-            if (healthMetrics.sleepQuality) mergedData.sleepQuality = healthMetrics.sleepQuality;
-            // Mark as real data when available
-            if (healthMetrics.heartRate || healthMetrics.hrv) {
-              mergedData.isSimulated = false;
+      let mergedData: any;
+      let risk: number;
+
+      // Priority: Dataset > Apple Health > Simulator
+      if (useDataset) {
+        // Use realistic dataset
+        const datasetService = getDatasetService();
+        const dataPoint = await datasetService.getNext();
+        
+        if (dataPoint) {
+          mergedData = datasetService.toWearableData(dataPoint);
+          risk = datasetService.getCurrentRisk();
+        } else {
+          // Fallback to simulator if dataset disabled
+          const simulator = getWearableSimulator();
+          mergedData = simulator.getCurrentData();
+          risk = simulator.getCurrentRisk();
+        }
+      } else {
+        // Use simulator
+        const simulator = getWearableSimulator();
+        mergedData = simulator.getCurrentData();
+        risk = simulator.getCurrentRisk();
+        
+        // Check if Apple Health is connected and fetch real data
+        if (Platform.OS === 'ios') {
+          const appleHealthConnected = await AsyncStorage.getItem('apple_health_connected');
+          if (appleHealthConnected === 'true') {
+            try {
+              const healthMetrics: any = await AppleHealthService.getLatestMetrics();
+              // Merge Apple Health data, preferring real data over simulated
+              if (healthMetrics.heartRate) mergedData.heartRate = healthMetrics.heartRate;
+              if (healthMetrics.hrv) mergedData.hrv = healthMetrics.hrv;
+              if (healthMetrics.steps !== undefined) mergedData.steps = healthMetrics.steps;
+              if (healthMetrics.sleepQuality) mergedData.sleepQuality = healthMetrics.sleepQuality;
+              // Mark as real data when available
+              if (healthMetrics.heartRate || healthMetrics.hrv) {
+                mergedData.isSimulated = false;
+              }
+            } catch (error) {
+              console.error('Error fetching Apple Health data:', error);
             }
-          } catch (error) {
-            console.error('Error fetching Apple Health data:', error);
           }
         }
       }
       
-      setCurrentRisk(Math.round(risk));
-      setLatestData((prev: any) => ({ ...prev, wearable: mergedData }));
+      const roundedRisk = Math.round(risk);
+      setCurrentRisk(roundedRisk);
+      
+      const updatedData = { ...latestData, wearable: mergedData };
+      setLatestData(updatedData);
+      
+      // Persist to AsyncStorage
+      await persistLatestData(updatedData);
+      await persistCurrentRisk(roundedRisk);
+      
+      // Automatically check and send notifications
+      await checkAndNotify(roundedRisk);
       
       // Send to backend every minute (not every 5 seconds to reduce load)
       if (Date.now() % 60000 < 5000) {
@@ -157,10 +281,22 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
    */
   const collectPhoneData = async () => {
     try {
-      const collector = getPhoneDataCollector();
-      const data = await collector.collectData();
+      let data: any;
+
+      if (useDataset) {
+        // Use dataset
+        const datasetService = getDatasetService();
+        const dataPoint = datasetService.getCurrent();
+        data = datasetService.toPhoneData(dataPoint);
+      } else {
+        // Use collector
+        const collector = getPhoneDataCollector();
+        data = await collector.collectData();
+      }
       
-      setLatestData((prev: any) => ({ ...prev, phone: data }));
+      const updatedData = { ...latestData, phone: data };
+      setLatestData(updatedData);
+      await persistLatestData(updatedData);
       
       await sendToBackend('/api/metrics/phone', {
         screenTimeMinutes: data.screenTimeMinutes,
@@ -180,10 +316,22 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
    */
   const collectWeatherData = async () => {
     try {
-      const collector = getLocationWeatherCollector();
-      const data = await collector.collectData();
+      let data: any;
+
+      if (useDataset) {
+        // Use dataset
+        const datasetService = getDatasetService();
+        const dataPoint = datasetService.getCurrent();
+        data = datasetService.toWeatherData(dataPoint);
+      } else {
+        // Use collector
+        const collector = getLocationWeatherCollector();
+        data = await collector.collectData();
+      }
       
-      setLatestData((prev: any) => ({ ...prev, weather: data }));
+      const updatedData = { ...latestData, weather: data };
+      setLatestData(updatedData);
+      await persistLatestData(updatedData);
       
       await sendToBackend('/api/metrics/location', {
         location: data.location,
@@ -202,7 +350,9 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
       const tracker = getSleepTracker();
       const data = tracker.collectData();
       
-      setLatestData((prev: any) => ({ ...prev, sleep: data }));
+      const updatedData = { ...latestData, sleep: data };
+      setLatestData(updatedData);
+      await persistLatestData(updatedData);
       
       // Only send complete sleep sessions
       if (data.sleepEndTime) {
@@ -226,10 +376,22 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
    */
   const collectCalendarData = async () => {
     try {
-      const integration = getCalendarIntegration();
-      const data = await integration.collectData();
+      let data: any;
+
+      if (useDataset) {
+        // Use dataset
+        const datasetService = getDatasetService();
+        const dataPoint = datasetService.getCurrent();
+        data = datasetService.toCalendarData(dataPoint);
+      } else {
+        // Use collector
+        const integration = getCalendarIntegration();
+        data = await integration.collectData();
+      }
       
-      setLatestData((prev: any) => ({ ...prev, calendar: data }));
+      const updatedData = { ...latestData, calendar: data };
+      setLatestData(updatedData);
+      await persistLatestData(updatedData);
       
       await sendToBackend('/api/metrics/calendar', {
         eventsToday: data.eventsToday,
@@ -259,6 +421,10 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
     
     // Request permissions first
     await requestPermissions();
+    
+    // Request notification permissions and enable notifications
+    await NotificationService.requestPermissions();
+    await NotificationService.enableNotifications();
     
     // Start wearable data collection (every 5 seconds)
     wearableInterval.current = setInterval(collectWearableData, 5000);
@@ -341,6 +507,29 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
     };
   }, [isSignedIn]);
 
+  /**
+   * Toggle between dataset and real/simulated data
+   */
+  const toggleDataset = async () => {
+    const newValue = !useDataset;
+    setUseDataset(newValue);
+    await AsyncStorage.setItem(USE_DATASET_KEY, newValue.toString());
+    
+    const datasetService = getDatasetService();
+    await datasetService.setMode(newValue ? 'sequential' : 'disabled');
+    
+    console.log(`📊 Dataset mode: ${newValue ? 'ENABLED' : 'DISABLED'}`);
+  };
+
+  /**
+   * Reset dataset to beginning
+   */
+  const resetDataset = async () => {
+    const datasetService = getDatasetService();
+    await datasetService.reset();
+    console.log('🔄 Dataset reset to beginning');
+  };
+
   const value: DataCollectionContextType = {
     isCollecting,
     latestData,
@@ -348,6 +537,9 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
     startCollection,
     stopCollection,
     requestPermissions,
+    useDataset,
+    toggleDataset,
+    resetDataset,
   };
 
   return (

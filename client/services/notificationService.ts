@@ -71,11 +71,11 @@ export class NotificationService {
       if (riskLevel >= 70) {
         shouldNotify = true;
         title = '🔴 High Migraine Risk Alert';
-        body = 'Your migraine risk is at ' + riskLevel + '%. Take preventive measures now: rest in a dark room, stay hydrated, and avoid triggers.';
+        body = 'Your migraine risk is at ' + riskLevel + '%. Take action now: rest in a dark room, stay hydrated, and avoid triggers.';
       } else if (riskLevel >= 50) {
         shouldNotify = true;
         title = '🟡 Moderate Migraine Risk';
-        body = 'Your migraine risk is at ' + riskLevel + '%. Consider taking a break, drinking water, and monitoring your symptoms.';
+        body = 'Your migraine risk is at ' + riskLevel + '%. Take a break, drink water, and monitor your symptoms closely.';
       } else if (riskLevel >= 30) {
         shouldNotify = true;
         title = '⚠️ Elevated Migraine Risk';

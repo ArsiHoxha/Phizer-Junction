@@ -1,5 +1,11 @@
 import axios from 'axios';
 import { API_URL } from '../config/config';
+import type { 
+  MigraineLog, 
+  QuickLogRequest, 
+  DetailedLogRequest,
+  MigraineAIAnalysis 
+} from '../types/migraine';
 
 // Create axios instance
 const api = axios.create({
@@ -106,25 +112,59 @@ export const riskAPI = {
   },
 };
 
-// Migraine Log API
+// Migraine Log API (Passive & Phase-Aware)
 export const migraineAPI = {
-  quickLogMigraine: async () => {
-    const response = await api.post('/migraine/quick-log');
+  /**
+   * Quick Log - One tap, AI does everything
+   * User just confirms "I have a migraine"
+   * AI automatically:
+   * - Captures all passive metrics
+   * - Detects current phase
+   * - Identifies prodrome symptoms from past 48h
+   * - Logs active triggers
+   * - Provides phase-specific recommendations
+   */
+  quickLogMigraine: async (data?: QuickLogRequest): Promise<{ success: boolean; log: MigraineLog }> => {
+    const response = await api.post('/migraine/quick-log', data || {});
     return response.data;
   },
   
-  logMigraine: async (data: { severity: number; symptoms: string[]; notes: string }) => {
+  /**
+   * Detailed Log - For power users
+   * Still mostly passive but allows confirming AI detections
+   */
+  logMigraine: async (data: DetailedLogRequest): Promise<{ success: boolean; log: MigraineLog }> => {
     const response = await api.post('/migraine/log', data);
     return response.data;
   },
   
-  getMigraineLogs: async (clerkId: string, days: number = 30) => {
+  /**
+   * Get migraine history with phase information
+   */
+  getMigraineLogs: async (clerkId: string, days: number = 30): Promise<MigraineLog[]> => {
     const response = await api.get(`/migraine/${clerkId}`, { params: { days } });
     return response.data;
   },
   
-  getAIAnalysis: async (migraineId: string) => {
+  /**
+   * Get AI analysis for a specific migraine
+   * Includes phase detection, early warning signals, and recommendations
+   */
+  getAIAnalysis: async (migraineId: string): Promise<MigraineAIAnalysis> => {
     const response = await api.get(`/migraine/${migraineId}/analysis`);
+    return response.data;
+  },
+  
+  /**
+   * Update migraine outcome (when it resolves)
+   * Automatically logs postdrome phase
+   */
+  updateOutcome: async (migraineId: string, data: { 
+    resolved: boolean; 
+    duration?: number; 
+    medicationTaken?: string;
+  }): Promise<{ success: boolean }> => {
+    const response = await api.patch(`/migraine/${migraineId}/outcome`, data);
     return response.data;
   },
 };

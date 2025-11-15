@@ -276,39 +276,197 @@ export default function DashboardScreen() {
     },
   ];
 
-  // Calculate triggers based on real data
-  const triggers = [
-    { 
-      name: 'HRV Drop', 
-      impact: wearableData.hrv < 40 ? 90 : wearableData.hrv < 55 ? 60 : 30,
-      active: wearableData.hrv < 55
-    },
-    { 
-      name: 'Sleep Debt', 
-      impact: Math.min(100, sleepData.sleepDebt * 20),
-      active: sleepData.sleepDebt > 2
-    },
-    { 
-      name: 'Stress Level', 
-      impact: wearableData.stress > 50 ? wearableData.stress : 0,
-      active: wearableData.stress > 50
-    },
-    { 
-      name: 'Screen Time', 
-      impact: Math.min(100, (phoneData.screenTimeMinutes / 360) * 100),
-      active: phoneData.screenTimeMinutes > 240
-    },
-    {
-      name: 'Calendar Stress',
-      impact: calendarData.stressScore || 0,
-      active: calendarData.stressScore > 50
-    },
-    {
-      name: 'Weather Change',
-      impact: weatherData.weather.pressure < 1000 ? 70 : weatherData.weather.uvIndex > 7 ? 60 : 20,
-      active: weatherData.weather.pressure < 1000 || weatherData.weather.uvIndex > 7
+  // Calculate dynamic triggers based on user-selected triggers from onboarding + real data
+  const calculateDynamicTriggers = () => {
+    const dynamicTriggers: any[] = [];
+
+    // Core metrics (always included)
+    dynamicTriggers.push(
+      { 
+        name: 'HRV Drop', 
+        value: `${Math.round(wearableData.hrv)}ms`,
+        impact: wearableData.hrv < 40 ? 90 : wearableData.hrv < 55 ? 60 : 30,
+        active: wearableData.hrv < 55,
+        type: 'core'
+      },
+      { 
+        name: 'Sleep Quality', 
+        value: `${Math.round(sleepData.sleepDebt)}h debt`,
+        impact: Math.min(100, sleepData.sleepDebt * 20),
+        active: sleepData.sleepDebt > 2,
+        type: 'core'
+      },
+      { 
+        name: 'Stress Level', 
+        value: `${Math.round(wearableData.stress)}%`,
+        impact: wearableData.stress > 50 ? wearableData.stress : 0,
+        active: wearableData.stress > 50,
+        type: 'core'
+      },
+      { 
+        name: 'Screen Time', 
+        value: `${(phoneData.screenTimeMinutes / 60).toFixed(1)}h`,
+        impact: Math.min(100, (phoneData.screenTimeMinutes / 360) * 100),
+        active: phoneData.screenTimeMinutes > 240,
+        type: 'core'
+      }
+    );
+
+    // Add user-selected triggers from onboarding with real data
+    if (userTriggers && userTriggers.length > 0) {
+      userTriggers.forEach(triggerName => {
+        let triggerData = null;
+
+        switch (triggerName.toLowerCase()) {
+          case 'lack of sleep':
+          case 'poor sleep':
+            triggerData = {
+              name: 'Poor Sleep',
+              value: `${sleepData.sleepHours.toFixed(1)}h`,
+              impact: sleepData.sleepHours < 6 ? 85 : sleepData.sleepHours < 7 ? 60 : 30,
+              active: sleepData.sleepHours < 7,
+              type: 'user'
+            };
+            break;
+
+          case 'stress':
+          case 'high stress':
+            triggerData = {
+              name: 'High Stress',
+              value: `${Math.round(wearableData.stress)}%`,
+              impact: wearableData.stress,
+              active: wearableData.stress > 60,
+              type: 'user'
+            };
+            break;
+
+          case 'weather changes':
+          case 'barometric pressure':
+            triggerData = {
+              name: 'Weather/Pressure',
+              value: `${Math.round(weatherData.weather.pressure)} hPa`,
+              impact: weatherData.weather.pressure < 1000 ? 80 : weatherData.weather.pressure < 1010 ? 50 : 20,
+              active: weatherData.weather.pressure < 1010,
+              type: 'user'
+            };
+            break;
+
+          case 'bright lights':
+          case 'light sensitivity':
+            triggerData = {
+              name: 'Bright Light',
+              value: `UV ${weatherData.weather.uvIndex}`,
+              impact: weatherData.weather.uvIndex > 7 ? 70 : weatherData.weather.uvIndex > 5 ? 45 : 15,
+              active: weatherData.weather.uvIndex > 5,
+              type: 'user'
+            };
+            break;
+
+          case 'dehydration':
+          case 'not enough water':
+            triggerData = {
+              name: 'Dehydration',
+              value: `${waterIntake}/8 glasses`,
+              impact: waterIntake < 4 ? 75 : waterIntake < 6 ? 50 : 20,
+              active: waterIntake < 6,
+              type: 'user'
+            };
+            break;
+
+          case 'caffeine':
+          case 'too much caffeine':
+            triggerData = {
+              name: 'Caffeine Overload',
+              value: `${coffeeIntake} cups`,
+              impact: coffeeIntake >= 4 ? 80 : coffeeIntake >= 3 ? 55 : 25,
+              active: coffeeIntake >= 3,
+              type: 'user'
+            };
+            break;
+
+          case 'skipping meals':
+          case 'hunger':
+            // Estimate based on calendar events (gaps > 5 hours)
+            const longGaps = calendarData.stressScore > 40;
+            triggerData = {
+              name: 'Meal Timing',
+              value: calendarData.stressScore > 50 ? 'Irregular' : 'Regular',
+              impact: longGaps ? 65 : 30,
+              active: longGaps,
+              type: 'user'
+            };
+            break;
+
+          case 'screen time':
+          case 'excessive screen use':
+            triggerData = {
+              name: 'Excess Screen',
+              value: `${(phoneData.screenTimeMinutes / 60).toFixed(1)}h`,
+              impact: Math.min(100, (phoneData.screenTimeMinutes / 300) * 100),
+              active: phoneData.screenTimeMinutes > 300,
+              type: 'user'
+            };
+            break;
+
+          case 'loud noises':
+          case 'noise':
+            // Estimate from calendar stress
+            triggerData = {
+              name: 'Noise/Activity',
+              value: `${calendarData.stressScore}% busy`,
+              impact: calendarData.stressScore,
+              active: calendarData.stressScore > 60,
+              type: 'user'
+            };
+            break;
+
+          case 'alcohol':
+            triggerData = {
+              name: 'Alcohol',
+              value: 'Tracked manually',
+              impact: 50, // Default medium risk
+              active: false,
+              type: 'user'
+            };
+            break;
+
+          case 'hormonal changes':
+          case 'menstrual cycle':
+            // This would need menstrual tracking data
+            triggerData = {
+              name: 'Hormonal',
+              value: 'Cycle tracking',
+              impact: 60,
+              active: false,
+              type: 'user'
+            };
+            break;
+
+          default:
+            // Generic trigger
+            triggerData = {
+              name: triggerName,
+              value: 'Monitoring',
+              impact: 40,
+              active: false,
+              type: 'user'
+            };
+        }
+
+        if (triggerData && !dynamicTriggers.find(t => t.name === triggerData.name)) {
+          dynamicTriggers.push(triggerData);
+        }
+      });
     }
-  ].sort((a, b) => b.impact - a.impact).slice(0, 4); // Top 4 triggers
+
+    // Sort by impact (highest first) and filter active ones
+    return dynamicTriggers
+      .filter(t => t.active)
+      .sort((a, b) => b.impact - a.impact)
+      .slice(0, 6); // Top 6 triggers
+  };
+
+  const triggers = calculateDynamicTriggers();
 
   // Prepare chart data
   const getChartData = () => {
@@ -399,6 +557,13 @@ export default function DashboardScreen() {
           location: latestData?.weather,
           calendar: latestData?.calendar,
           currentRisk,
+          // NEW: Include user-selected triggers and their current status
+          userTriggers: userTriggers,
+          activeTriggers: triggers, // Dynamic triggers with real values
+          intakeData: {
+            water: waterIntake,
+            coffee: coffeeIntake,
+          },
         },
         {
           headers: {
@@ -512,22 +677,22 @@ export default function DashboardScreen() {
           className="mx-6 mb-6"
         >
           <View style={{ 
-            backgroundColor: isDark ? '#000000' : '#1A1A1A',
+            backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF',
             borderWidth: 1,
-            borderColor: isDark ? '#2D2D2D' : '#3D3D3D'
+            borderColor: isDark ? '#2D2D2D' : '#E5E7EB'
           }} className="rounded-3xl p-8">
             <Text style={{ 
-              color: isDark ? '#9CA3AF' : '#D1D5DB' 
+              color: isDark ? '#9CA3AF' : '#6B7280' 
             }} className="text-sm mb-3 tracking-wider">
               MIGRAINE RISK INDEX
             </Text>
             <View className="flex-row items-end mb-4">
-              <Text style={{ color: '#FFFFFF' }} className="text-7xl font-bold">{riskLevel}</Text>
-              <Text style={{ color: '#FFFFFF' }} className="text-3xl font-bold mb-2">%</Text>
+              <Text style={{ color: isDark ? '#FFFFFF' : '#1F2937' }} className="text-7xl font-bold">{riskLevel}</Text>
+              <Text style={{ color: isDark ? '#FFFFFF' : '#1F2937' }} className="text-3xl font-bold mb-2">%</Text>
             </View>
             <View className="flex-row items-center mb-6">
               <View className={`w-3 h-3 rounded-full ${riskColor} mr-2`} />
-              <Text style={{ color: isDark ? '#D1D5DB' : '#E5E7EB' }} className="text-lg font-medium">{riskStatus} Risk</Text>
+              <Text style={{ color: isDark ? '#D1D5DB' : '#4B5563' }} className="text-lg font-medium">{riskStatus} Risk</Text>
               {isCollecting && (
                 <View className="ml-auto">
                   <View className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -539,7 +704,7 @@ export default function DashboardScreen() {
             {historicalData.length >= 2 ? (
               <View style={{ 
                 borderTopWidth: 1, 
-                borderTopColor: isDark ? '#2D2D2D' : '#3D3D3D',
+                borderTopColor: isDark ? '#2D2D2D' : '#E5E7EB',
                 paddingTop: 16 
               }}>
                 <BarChart
@@ -551,10 +716,10 @@ export default function DashboardScreen() {
                   stackData={getStackedBarData()}
                   xAxisThickness={0}
                   yAxisThickness={0}
-                  yAxisTextStyle={{ color: isDark ? '#9CA3AF' : '#D1D5DB', fontSize: 10 }}
-                  xAxisLabelTextStyle={{ color: isDark ? '#9CA3AF' : '#D1D5DB', fontSize: 10 }}
+                  yAxisTextStyle={{ color: isDark ? '#9CA3AF' : '#6B7280', fontSize: 10 }}
+                  xAxisLabelTextStyle={{ color: isDark ? '#9CA3AF' : '#6B7280', fontSize: 10 }}
                   hideRules
-                  backgroundColor={isDark ? '#000000' : '#1A1A1A'}
+                  backgroundColor={isDark ? '#1A1A1A' : '#FFFFFF'}
                   showGradient={false}
                   rotateLabel={false}
                   width={width - 130}
@@ -565,54 +730,31 @@ export default function DashboardScreen() {
                 <View className="flex-row justify-center mt-4 space-x-4">
                   <View className="flex-row items-center">
                     <View className="w-3 h-3 rounded-full bg-blue-500 mr-1" />
-                    <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs">HRV</Text>
+                    <Text style={{ color: isDark ? '#9CA3AF' : '#6B7280' }} className="text-xs">HRV</Text>
                   </View>
                   <View className="flex-row items-center">
                     <View className="w-3 h-3 rounded-full bg-orange-500 mr-1" />
-                    <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs">Stress</Text>
+                    <Text style={{ color: isDark ? '#9CA3AF' : '#6B7280' }} className="text-xs">Stress</Text>
                   </View>
                   <View className="flex-row items-center">
                     <View className="w-3 h-3 rounded-full bg-red-500 mr-1" />
-                    <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs">Sleep</Text>
+                    <Text style={{ color: isDark ? '#9CA3AF' : '#6B7280' }} className="text-xs">Sleep</Text>
                   </View>
                 </View>
               </View>
             ) : (
               <View style={{ 
                 borderTopWidth: 1, 
-                borderTopColor: isDark ? '#2D2D2D' : '#3D3D3D',
+                borderTopColor: isDark ? '#2D2D2D' : '#E5E7EB',
                 paddingTop: 16 
               }}>
-                <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-sm text-center">
+                <Text style={{ color: isDark ? '#9CA3AF' : '#6B7280' }} className="text-sm text-center">
                   Collecting data... Check back in a few minutes
                 </Text>
               </View>
             )}
           </View>
         </Animated.View>
-
-        {/* Period Selector */}
-        <View className="px-6 mb-4">
-          <View style={{ backgroundColor: isDark ? '#000000' : '#f3f4f6' }} className="flex-row rounded-full p-1">
-            {['today', 'week', 'month'].map((period) => (
-              <TouchableOpacity
-                key={period}
-                onPress={() => setSelectedPeriod(period)}
-                style={{ backgroundColor: selectedPeriod === period ? (isDark ? '#FFFFFF' : '#000000') : 'transparent' }}
-                className="flex-1 py-2 rounded-full"
-                activeOpacity={0.7}
-              >
-                <Text style={{ 
-                  color: selectedPeriod === period 
-                    ? (isDark ? '#000000' : '#FFFFFF') 
-                    : (isDark ? '#9CA3AF' : '#6B7280')
-                }} className="text-center text-sm font-semibold capitalize">
-                  {period}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
 
         {/* Quick Metrics */}
         <Animated.View 
@@ -670,11 +812,6 @@ export default function DashboardScreen() {
                   <View style={{ 
                     backgroundColor: isDark ? '#000000' : colors.card,
                     borderColor: isDark ? '#2D2D2D' : colors.border,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: isDark ? 0.3 : 0.1,
-                    shadowRadius: 4,
-                    elevation: 3,
                   }} className="rounded-2xl p-3 border items-center">
                     <CircularProgress
                       size={50}
@@ -716,55 +853,50 @@ export default function DashboardScreen() {
         {/* Water & Coffee Intake */}
         <Animated.View 
           entering={FadeInUp.duration(600).delay(350)}
-          className="px-6 mb-6"
+          className="px-6 mb-8"
         >
           <Text style={{ color: colors.text }} className="text-xl font-semibold mb-4">
             Daily Intake Tracker
           </Text>
           
-          <View className="flex-row space-x-3">
+          <View className="flex-row" style={{ gap: 12 }}>
             {/* Water Intake */}
             <View className="flex-1">
               <View style={{ 
-                backgroundColor: isDark ? '#000000' : colors.card,
+                backgroundColor: isDark ? '#1A1A1A' : colors.card,
                 borderColor: isDark ? '#2D2D2D' : colors.border,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: isDark ? 0.3 : 0.1,
-                shadowRadius: 4,
-                elevation: 3,
-              }} className="rounded-2xl p-4 border">
-                <View className="items-center mb-3">
-                  <Ionicons name="water" size={32} color="#3B82F6" />
-                  <Text style={{ color: colors.text }} className="text-sm font-semibold mt-2">Water</Text>
+              }} className="rounded-2xl p-3 border">
+                <View className="items-center mb-2">
+                  <Ionicons name="water" size={28} color="#3B82F6" />
+                  <Text style={{ color: colors.text }} className="text-xs font-semibold mt-1">Water</Text>
                 </View>
                 
-                <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center justify-between mb-2">
                   <TouchableOpacity 
                     onPress={decrementWater}
-                    style={{ backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6' }}
-                    className="w-10 h-10 rounded-full items-center justify-center"
+                    style={{ backgroundColor: isDark ? '#000000' : '#f3f4f6' }}
+                    className="w-8 h-8 rounded-full items-center justify-center"
                   >
-                    <Ionicons name="remove" size={20} color={colors.text} />
+                    <Ionicons name="remove" size={16} color={colors.text} />
                   </TouchableOpacity>
                   
                   <View className="items-center">
-                    <Text style={{ color: colors.text }} className="text-3xl font-bold">{waterIntake}</Text>
-                    <Text style={{ color: colors.textSecondary }} className="text-xs">glasses</Text>
+                    <Text style={{ color: colors.text }} className="text-2xl font-bold">{waterIntake}</Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-[10px]">glasses</Text>
                   </View>
                   
                   <TouchableOpacity 
                     onPress={incrementWater}
                     style={{ backgroundColor: '#3B82F6' }}
-                    className="w-10 h-10 rounded-full items-center justify-center"
+                    className="w-8 h-8 rounded-full items-center justify-center"
                   >
-                    <Ionicons name="add" size={20} color="#fff" />
+                    <Ionicons name="add" size={16} color="#fff" />
                   </TouchableOpacity>
                 </View>
                 
-                <View style={{ backgroundColor: isDark ? '#1a1a1a' : '#f0f9ff' }} className="rounded-xl p-2">
-                  <Text style={{ color: waterIntake >= 8 ? '#22C55E' : '#3B82F6' }} className="text-xs text-center font-medium">
-                    {waterIntake >= 8 ? '✓ Goal Reached!' : `Goal: 8 glasses`}
+                <View style={{ backgroundColor: isDark ? '#0F172A' : '#f0f9ff' }} className="rounded-lg p-1.5">
+                  <Text style={{ color: waterIntake >= 8 ? '#22C55E' : '#3B82F6' }} className="text-[10px] text-center font-medium">
+                    {waterIntake >= 8 ? '✓ Goal!' : `Goal: 8`}
                   </Text>
                 </View>
               </View>
@@ -773,45 +905,40 @@ export default function DashboardScreen() {
             {/* Coffee Intake */}
             <View className="flex-1">
               <View style={{ 
-                backgroundColor: isDark ? '#000000' : colors.card,
+                backgroundColor: isDark ? '#1A1A1A' : colors.card,
                 borderColor: isDark ? '#2D2D2D' : colors.border,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: isDark ? 0.3 : 0.1,
-                shadowRadius: 4,
-                elevation: 3,
-              }} className="rounded-2xl p-4 border">
-                <View className="items-center mb-3">
-                  <Ionicons name="cafe" size={32} color="#92400E" />
-                  <Text style={{ color: colors.text }} className="text-sm font-semibold mt-2">Coffee</Text>
+              }} className="rounded-2xl p-3 border">
+                <View className="items-center mb-2">
+                  <Ionicons name="cafe" size={28} color="#92400E" />
+                  <Text style={{ color: colors.text }} className="text-xs font-semibold mt-1">Coffee</Text>
                 </View>
                 
-                <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center justify-between mb-2">
                   <TouchableOpacity 
                     onPress={decrementCoffee}
-                    style={{ backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6' }}
-                    className="w-10 h-10 rounded-full items-center justify-center"
+                    style={{ backgroundColor: isDark ? '#000000' : '#f3f4f6' }}
+                    className="w-8 h-8 rounded-full items-center justify-center"
                   >
-                    <Ionicons name="remove" size={20} color={colors.text} />
+                    <Ionicons name="remove" size={16} color={colors.text} />
                   </TouchableOpacity>
                   
                   <View className="items-center">
-                    <Text style={{ color: colors.text }} className="text-3xl font-bold">{coffeeIntake}</Text>
-                    <Text style={{ color: colors.textSecondary }} className="text-xs">cups</Text>
+                    <Text style={{ color: colors.text }} className="text-2xl font-bold">{coffeeIntake}</Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-[10px]">cups</Text>
                   </View>
                   
                   <TouchableOpacity 
                     onPress={incrementCoffee}
                     style={{ backgroundColor: '#92400E' }}
-                    className="w-10 h-10 rounded-full items-center justify-center"
+                    className="w-8 h-8 rounded-full items-center justify-center"
                   >
-                    <Ionicons name="add" size={20} color="#fff" />
+                    <Ionicons name="add" size={16} color="#fff" />
                   </TouchableOpacity>
                 </View>
                 
-                <View style={{ backgroundColor: isDark ? '#1a1a1a' : '#fef3c7' }} className="rounded-xl p-2">
-                  <Text style={{ color: coffeeIntake >= 3 ? '#EF4444' : '#92400E' }} className="text-xs text-center font-medium">
-                    {coffeeIntake >= 3 ? '⚠️ High Intake' : `Limit: 2-3 cups`}
+                <View style={{ backgroundColor: isDark ? '#1C1917' : '#fef3c7' }} className="rounded-lg p-1.5">
+                  <Text style={{ color: coffeeIntake >= 3 ? '#EF4444' : '#92400E' }} className="text-[10px] text-center font-medium">
+                    {coffeeIntake >= 3 ? '⚠️ High' : `Limit: 2-3`}
                   </Text>
                 </View>
               </View>
@@ -819,28 +946,61 @@ export default function DashboardScreen() {
           </View>
         </Animated.View>
 
-        {/* Top Triggers */}
+        {/* Top Contributing Triggers */}
         <Animated.View 
           entering={FadeInUp.duration(600).delay(300)}
           className="px-6 mb-6"
         >
-          <Text style={{ color: colors.text }} className="text-xl font-semibold mb-4">
-            Top Contributing Triggers
-          </Text>
-          {triggers.map((trigger, index) => (
-            <View key={index} className="mb-3">
-              <View className="flex-row items-center justify-between mb-2">
-                <Text style={{ color: colors.text }} className="text-base font-medium">{trigger.name}</Text>
-                <Text style={{ color: colors.text }} className="text-sm font-semibold">{trigger.impact}%</Text>
+          <View className="flex-row items-center justify-between mb-4">
+            <Text style={{ color: colors.text }} className="text-xl font-semibold">
+              Your Tracked Triggers
+            </Text>
+            <TouchableOpacity onPress={() => setShowTriggersModal(true)}>
+              <Text style={{ color: colors.primary }} className="text-sm font-medium">
+                See All
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {triggers.length > 0 ? (
+            triggers.map((trigger, index) => (
+              <View key={index} className="mb-4">
+                <View className="flex-row items-center justify-between mb-2">
+                  <View className="flex-1">
+                    <Text style={{ color: colors.text }} className="text-base font-semibold">
+                      {trigger.name}
+                    </Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-xs mt-0.5">
+                      {trigger.value}
+                    </Text>
+                  </View>
+                  <View className="items-end">
+                    <Text style={{ color: trigger.impact > 70 ? '#EF4444' : trigger.impact > 50 ? '#F59E0B' : colors.primary }} className="text-lg font-bold">
+                      {Math.round(trigger.impact)}%
+                    </Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-[10px]">
+                      risk
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ backgroundColor: isDark ? '#2a2a2a' : '#e5e5e5' }} className="h-2.5 rounded-full overflow-hidden">
+                  <View 
+                    style={{ 
+                      backgroundColor: trigger.impact > 70 ? '#EF4444' : trigger.impact > 50 ? '#F59E0B' : colors.primary,
+                      width: `${trigger.impact}%` 
+                    }}
+                    className="h-full rounded-full"
+                  />
+                </View>
               </View>
-              <View style={{ backgroundColor: isDark ? '#2a2a2a' : '#e5e5e5' }} className="h-2 rounded-full overflow-hidden">
-                <View 
-                  style={{ backgroundColor: colors.primary, width: `${trigger.impact}%` }}
-                  className="h-full rounded-full"
-                />
-              </View>
+            ))
+          ) : (
+            <View style={{ backgroundColor: isDark ? '#1A1A1A' : '#F3F4F6' }} className="rounded-2xl p-4">
+              <Text style={{ color: colors.textSecondary }} className="text-sm text-center">
+                No active triggers detected. Keep monitoring! 🎯
+              </Text>
             </View>
-          ))}
+          )}
         </Animated.View>
 
         {/* AI Tip Card */}
