@@ -4,6 +4,7 @@ const cors = require('cors');
 const { clerkMiddleware, requireAuth } = require('@clerk/express');
 const { analyzeHealthData, getTriggerInsights } = require('./services/geminiService');
 const { textToSpeech } = require('./services/elevenLabsService');
+const { getCurrentWeather, getWeatherForecast, detectPressureDrops } = require('./services/weatherService');
 require('dotenv').config();
 
 const app = express();
@@ -432,7 +433,105 @@ app.post('/api/metrics/location', requireAuth(), async (req, res) => {
   }
 });
 
-// Wearable/Simulated data (HRV, heart rate, stress, steps)
+// 🔥 NEW: Real-time metrics from HealthKit + Real Weather API
+app.post('/api/metrics/real', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { 
+      // HealthKit data (from client)
+      hrv, 
+      heartRate, 
+      stress, 
+      sleepQuality, 
+      sleepHours,
+      steps,
+      // Location for weather
+      latitude, 
+      longitude 
+    } = req.body;
+
+    // Get REAL weather from API
+    const realWeather = await getCurrentWeather(latitude, longitude);
+    
+    // Save comprehensive metric with all REAL data
+    const metric = new Metric({
+      userId,
+      clerkId: userId,
+      timestamp: new Date(),
+      // HealthKit metrics
+      hrv,
+      heartRate,
+      stress,
+      sleepQuality,
+      steps,
+      // Real weather data
+      latitude,
+      longitude,
+      city: realWeather.city,
+      temperature: realWeather.temperature,
+      humidity: realWeather.humidity,
+      pressure: realWeather.pressure, // CRITICAL for migraines!
+      uvIndex: realWeather.uvIndex,
+      weatherCondition: realWeather.condition,
+      isSimulated: false, // THIS IS REAL DATA
+      dataSource: 'real-integrated', // HealthKit + Weather API
+    });
+
+    await metric.save();
+    
+    // AI-POWERED RISK CALCULATION from REAL metrics
+    const aiRiskAnalysis = await calculateAIRiskFromMetrics(userId, {
+      hrv,
+      heartRate,
+      stress,
+      sleepQuality,
+    });
+    
+    // Save risk history with AI analysis
+    const riskHistory = new RiskHistory({
+      userId,
+      clerkId: userId,
+      riskIndex: aiRiskAnalysis.riskScore,
+      riskLevel: aiRiskAnalysis.riskLevel,
+      timestamp: new Date(),
+      contributingFactors: aiRiskAnalysis.factors,
+      metricsSnapshot: {
+        hrv,
+        heartRate,
+        stress,
+        sleepQuality,
+        stressLevel: stress > 70 ? 'High' : stress > 40 ? 'Medium' : 'Low',
+      },
+    });
+    
+    await riskHistory.save();
+
+    // Get weather forecast for pressure drop warnings
+    const forecast = await getWeatherForecast(latitude, longitude);
+    const pressureWarnings = detectPressureDrops(forecast);
+
+    res.status(201).json({ 
+      success: true, 
+      metric,
+      realWeather: {
+        ...realWeather,
+        pressureWarnings, // Warnings for upcoming pressure drops
+      },
+      aiRiskAnalysis: {
+        riskScore: aiRiskAnalysis.riskScore,
+        riskLevel: aiRiskAnalysis.riskLevel,
+        explanation: aiRiskAnalysis.explanation,
+        factors: aiRiskAnalysis.factors,
+      },
+      message: '✅ Real data saved from HealthKit + Weather API'
+    });
+  } catch (error) {
+    console.error('Error saving real metrics:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Wearable/Simulated data (HRV, heart rate, stress, steps) - DEPRECATED, use /api/metrics/real
 app.post('/api/metrics/wearable', requireAuth(), async (req, res) => {
   try {
     const { userId } = req.auth;
@@ -453,59 +552,234 @@ app.post('/api/metrics/wearable', requireAuth(), async (req, res) => {
 
     await metric.save();
     
-    // Calculate and update risk score based on wearable data
-    const riskScore = calculateRiskFromMetrics({
+    // AI-POWERED RISK CALCULATION from actual metrics
+    const aiRiskAnalysis = await calculateAIRiskFromMetrics(userId, {
       hrv,
       heartRate,
       stress,
       sleepQuality,
     });
     
-    // Determine risk level based on score
-    let riskLevel = 'low';
-    if (riskScore >= 70) riskLevel = 'high';
-    else if (riskScore >= 40) riskLevel = 'medium';
-    
-    // Save risk history
+    // Save risk history with AI analysis
     const riskHistory = new RiskHistory({
       userId,
       clerkId: userId,
-      riskIndex: riskScore,
-      riskLevel: riskLevel,
+      riskIndex: aiRiskAnalysis.riskScore,
+      riskLevel: aiRiskAnalysis.riskLevel,
       timestamp: new Date(),
-      contributingFactors: [
-        {
-          name: 'HRV',
-          impact: hrv < 40 ? 90 : hrv < 55 ? 60 : 30,
-          icon: '❤️'
-        },
-        {
-          name: 'Stress',
-          impact: stress > 70 ? 90 : stress > 40 ? 60 : 30,
-          icon: '😰'
-        },
-        {
-          name: 'Sleep Quality',
-          impact: sleepQuality < 50 ? 90 : sleepQuality < 70 ? 60 : 30,
-          icon: '😴'
-        },
-      ],
+      contributingFactors: aiRiskAnalysis.factors,
       metricsSnapshot: {
         hrv,
+        heartRate,
+        stress,
+        sleepQuality,
         stressLevel: stress > 70 ? 'High' : stress > 40 ? 'Medium' : 'Low',
       },
     });
     
     await riskHistory.save();
 
-    res.status(201).json({ success: true, metric, riskScore });
+    res.status(201).json({ 
+      success: true, 
+      metric, 
+      riskScore: aiRiskAnalysis.riskScore,
+      riskLevel: aiRiskAnalysis.riskLevel,
+      aiAnalysis: aiRiskAnalysis.explanation
+    });
   } catch (error) {
     console.error('Error saving wearable data:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Helper function to calculate risk from metrics
+// Helper function - AI-powered risk calculation from actual metrics
+async function calculateAIRiskFromMetrics(clerkId, metrics) {
+  try {
+    // Get historical migraine data for learning
+    const historicalMigraines = await MigraineLog.find({ clerkId }).sort({ timestamp: -1 }).limit(50);
+    
+    let riskScore = 0;
+    const factors = [];
+    let explanation = '';
+
+    if (historicalMigraines.length >= 3) {
+      // AI LEARNING MODE: Compare current metrics to learned migraine patterns
+      const learnedPatterns = {
+        avgHRVAtMigraine: 0,
+        avgStressAtMigraine: 0,
+        avgSleepQualityAtMigraine: 0,
+        count: 0,
+      };
+
+      historicalMigraines.forEach(migraine => {
+        if (migraine.metricsSnapshot?.hrv) learnedPatterns.avgHRVAtMigraine += migraine.metricsSnapshot.hrv;
+        if (migraine.metricsSnapshot?.stress) learnedPatterns.avgStressAtMigraine += migraine.metricsSnapshot.stress;
+        if (migraine.metricsSnapshot?.sleepQuality) learnedPatterns.avgSleepQualityAtMigraine += migraine.metricsSnapshot.sleepQuality;
+        learnedPatterns.count++;
+      });
+
+      learnedPatterns.avgHRVAtMigraine /= learnedPatterns.count;
+      learnedPatterns.avgStressAtMigraine /= learnedPatterns.count;
+      learnedPatterns.avgSleepQualityAtMigraine /= learnedPatterns.count;
+
+      explanation = `AI Analysis based on ${historicalMigraines.length} past migraines:\n`;
+
+      // HRV Analysis
+      if (metrics.hrv) {
+        const hrvDiff = Math.abs(metrics.hrv - learnedPatterns.avgHRVAtMigraine);
+        if (hrvDiff < 10) {
+          const impact = Math.round((1 - hrvDiff / 10) * 30);
+          riskScore += impact;
+          factors.push({
+            name: 'HRV Pattern Match',
+            impact,
+            icon: '❤️'
+          });
+          explanation += `• Your HRV is ${Math.round(metrics.hrv)}, very similar to your migraine pattern (avg ${Math.round(learnedPatterns.avgHRVAtMigraine)}). Risk +${impact}%\n`;
+        } else {
+          explanation += `• Your HRV is ${Math.round(metrics.hrv)}, different from your migraine pattern (avg ${Math.round(learnedPatterns.avgHRVAtMigraine)}). Good sign!\n`;
+        }
+      }
+
+      // Stress Analysis
+      if (metrics.stress) {
+        const stressDiff = Math.abs(metrics.stress - learnedPatterns.avgStressAtMigraine);
+        if (stressDiff < 15) {
+          const impact = Math.round((1 - stressDiff / 15) * 30);
+          riskScore += impact;
+          factors.push({
+            name: 'Stress Pattern Match',
+            impact,
+            icon: '😰'
+          });
+          explanation += `• Your stress is ${Math.round(metrics.stress)}%, similar to your migraine pattern (avg ${Math.round(learnedPatterns.avgStressAtMigraine)}%). Risk +${impact}%\n`;
+        } else {
+          explanation += `• Your stress is ${Math.round(metrics.stress)}%, different from your migraine pattern (avg ${Math.round(learnedPatterns.avgStressAtMigraine)}%).\n`;
+        }
+      }
+
+      // Sleep Quality Analysis
+      if (metrics.sleepQuality) {
+        const sleepDiff = Math.abs(metrics.sleepQuality - learnedPatterns.avgSleepQualityAtMigraine);
+        if (sleepDiff < 15) {
+          const impact = Math.round((1 - sleepDiff / 15) * 25);
+          riskScore += impact;
+          factors.push({
+            name: 'Sleep Pattern Match',
+            impact,
+            icon: '😴'
+          });
+          explanation += `• Your sleep quality is ${Math.round(metrics.sleepQuality)}%, similar to your migraine pattern (avg ${Math.round(learnedPatterns.avgSleepQualityAtMigraine)}%). Risk +${impact}%\n`;
+        } else {
+          explanation += `• Your sleep quality is ${Math.round(metrics.sleepQuality)}%, different from your migraine pattern (avg ${Math.round(learnedPatterns.avgSleepQualityAtMigraine)}%).\n`;
+        }
+      }
+
+    } else {
+      // BASELINE MODE: Analyze actual metrics with medical thresholds
+      explanation = `Analysis of your current metrics:\n`;
+
+      // HRV Analysis (Normal: 50-100, Low: 20-50, Critical: <20)
+      if (metrics.hrv) {
+        if (metrics.hrv < 30) {
+          riskScore += 40;
+          factors.push({ name: 'Critical HRV', impact: 40, icon: '❤️' });
+          explanation += `• Your HRV is ${Math.round(metrics.hrv)} (Critical - very low heart rate variability indicates severe stress). Risk +40%\n`;
+        } else if (metrics.hrv < 45) {
+          riskScore += 25;
+          factors.push({ name: 'Low HRV', impact: 25, icon: '❤️' });
+          explanation += `• Your HRV is ${Math.round(metrics.hrv)} (Low - indicates elevated stress). Risk +25%\n`;
+        } else if (metrics.hrv < 55) {
+          riskScore += 10;
+          factors.push({ name: 'Below Average HRV', impact: 10, icon: '❤️' });
+          explanation += `• Your HRV is ${Math.round(metrics.hrv)} (Below average - mild stress). Risk +10%\n`;
+        } else {
+          explanation += `• Your HRV is ${Math.round(metrics.hrv)} (Good - healthy heart rate variability).\n`;
+        }
+      }
+
+      // Heart Rate Analysis (Normal resting: 60-100, Elevated: 80-100, High: >100)
+      if (metrics.heartRate) {
+        if (metrics.heartRate > 90) {
+          riskScore += 20;
+          factors.push({ name: 'Elevated Heart Rate', impact: 20, icon: '💓' });
+          explanation += `• Your heart rate is ${Math.round(metrics.heartRate)} bpm (Elevated - potential stress or poor recovery). Risk +20%\n`;
+        } else if (metrics.heartRate > 80) {
+          riskScore += 10;
+          factors.push({ name: 'Higher Heart Rate', impact: 10, icon: '💓' });
+          explanation += `• Your heart rate is ${Math.round(metrics.heartRate)} bpm (Higher than ideal). Risk +10%\n`;
+        } else {
+          explanation += `• Your heart rate is ${Math.round(metrics.heartRate)} bpm (Normal range).\n`;
+        }
+      }
+
+      // Stress Analysis (Low: 0-30, Moderate: 30-60, High: 60-80, Critical: >80)
+      if (metrics.stress) {
+        if (metrics.stress > 75) {
+          riskScore += 30;
+          factors.push({ name: 'Critical Stress', impact: 30, icon: '😰' });
+          explanation += `• Your stress level is ${Math.round(metrics.stress)}% (Critical - very high stress is a major migraine trigger). Risk +30%\n`;
+        } else if (metrics.stress > 50) {
+          riskScore += 15;
+          factors.push({ name: 'High Stress', impact: 15, icon: '😰' });
+          explanation += `• Your stress level is ${Math.round(metrics.stress)}% (High - elevated stress increases migraine risk). Risk +15%\n`;
+        } else if (metrics.stress > 30) {
+          riskScore += 5;
+          factors.push({ name: 'Moderate Stress', impact: 5, icon: '😰' });
+          explanation += `• Your stress level is ${Math.round(metrics.stress)}% (Moderate - manageable). Risk +5%\n`;
+        } else {
+          explanation += `• Your stress level is ${Math.round(metrics.stress)}% (Low - good stress management).\n`;
+        }
+      }
+
+      // Sleep Quality Analysis (Excellent: 85-100, Good: 70-85, Fair: 50-70, Poor: <50)
+      if (metrics.sleepQuality) {
+        if (metrics.sleepQuality < 40) {
+          riskScore += 30;
+          factors.push({ name: 'Very Poor Sleep', impact: 30, icon: '😴' });
+          explanation += `• Your sleep quality is ${Math.round(metrics.sleepQuality)}% (Very poor - significant sleep deprivation increases migraine risk). Risk +30%\n`;
+        } else if (metrics.sleepQuality < 60) {
+          riskScore += 20;
+          factors.push({ name: 'Poor Sleep', impact: 20, icon: '😴' });
+          explanation += `• Your sleep quality is ${Math.round(metrics.sleepQuality)}% (Poor - inadequate sleep recovery). Risk +20%\n`;
+        } else if (metrics.sleepQuality < 75) {
+          riskScore += 10;
+          factors.push({ name: 'Fair Sleep', impact: 10, icon: '😴' });
+          explanation += `• Your sleep quality is ${Math.round(metrics.sleepQuality)}% (Fair - could be improved). Risk +10%\n`;
+        } else {
+          explanation += `• Your sleep quality is ${Math.round(metrics.sleepQuality)}% (Good - adequate rest).\n`;
+        }
+      }
+    }
+
+    // Normalize risk score
+    riskScore = Math.min(Math.round(riskScore), 100);
+    
+    const riskLevel = riskScore < 30 ? 'low' : riskScore < 60 ? 'medium' : 'high';
+    
+    explanation += `\nFinal Migraine Risk Index: ${riskScore}% (${riskLevel.toUpperCase()})`;
+
+    return {
+      riskScore,
+      riskLevel,
+      factors: factors.sort((a, b) => b.impact - a.impact),
+      explanation,
+      aiPrediction: historicalMigraines.length >= 3
+    };
+  } catch (error) {
+    console.error('Error in AI risk calculation:', error);
+    // Fallback to simple calculation
+    return {
+      riskScore: 20,
+      riskLevel: 'low',
+      factors: [],
+      explanation: 'Unable to calculate risk at this time',
+      aiPrediction: false
+    };
+  }
+}
+
+// Helper function to calculate risk from metrics (deprecated - kept for compatibility)
 function calculateRiskFromMetrics(metrics) {
   let risk = 0;
   
@@ -547,56 +821,177 @@ app.get('/api/risk/:clerkId', requireAuth(), async (req, res) => {
       });
     }
 
-    // Get user's baseline and triggers
+    // Get user's learned patterns and triggers
     const user = await User.findOne({ clerkId });
 
-    // Simple risk calculation formula
+    // Get historical migraine data to learn patterns
+    const historicalMigraines = await MigraineLog.find({ clerkId }).sort({ timestamp: -1 }).limit(50);
+
+    // AI-POWERED RISK CALCULATION
     let riskScore = 0;
     const factors = [];
 
-    // HRV factor (0-30 points)
-    if (latestMetric.hrv && user.baselineMetrics?.avgHRV) {
-      const hrvDrop = ((user.baselineMetrics.avgHRV - latestMetric.hrv) / user.baselineMetrics.avgHRV) * 100;
-      if (hrvDrop > 10) {
-        const hrvImpact = Math.min(hrvDrop * 2, 30);
-        riskScore += hrvImpact;
-        factors.push({ name: 'HRV Drop', impact: Math.round(hrvDrop), icon: '💓' });
+    if (historicalMigraines.length >= 3) {
+      // LEARNED PATTERNS: Calculate average metrics when migraines occur
+      const learnedPatterns = {
+        avgHRVAtMigraine: 0,
+        avgStressAtMigraine: 0,
+        avgSleepQualityAtMigraine: 0,
+        avgScreenTimeAtMigraine: 0,
+        avgPressureAtMigraine: 0,
+        count: 0,
+      };
+
+      historicalMigraines.forEach(migraine => {
+        if (migraine.metricsSnapshot?.hrv) {
+          learnedPatterns.avgHRVAtMigraine += migraine.metricsSnapshot.hrv;
+          learnedPatterns.count++;
+        }
+        if (migraine.metricsSnapshot?.stress) {
+          learnedPatterns.avgStressAtMigraine += migraine.metricsSnapshot.stress;
+        }
+        if (migraine.metricsSnapshot?.sleepQuality) {
+          learnedPatterns.avgSleepQualityAtMigraine += migraine.metricsSnapshot.sleepQuality;
+        }
+        if (migraine.metricsSnapshot?.screenTime) {
+          learnedPatterns.avgScreenTimeAtMigraine += migraine.metricsSnapshot.screenTime;
+        }
+        if (migraine.metricsSnapshot?.weather?.pressure) {
+          learnedPatterns.avgPressureAtMigraine += migraine.metricsSnapshot.weather.pressure;
+        }
+      });
+
+      if (learnedPatterns.count > 0) {
+        learnedPatterns.avgHRVAtMigraine /= learnedPatterns.count;
+        learnedPatterns.avgStressAtMigraine /= learnedPatterns.count;
+        learnedPatterns.avgSleepQualityAtMigraine /= learnedPatterns.count;
+        learnedPatterns.avgScreenTimeAtMigraine /= learnedPatterns.count;
+        learnedPatterns.avgPressureAtMigraine /= learnedPatterns.count;
+
+        console.log(`🧠 Using learned patterns from ${historicalMigraines.length} migraines for risk prediction`);
+
+        // HRV Risk (compare current to learned migraine average)
+        if (latestMetric.hrv && learnedPatterns.avgHRVAtMigraine) {
+          const hrvDifference = Math.abs(latestMetric.hrv - learnedPatterns.avgHRVAtMigraine);
+          if (hrvDifference < 10) {
+            // Current HRV is very close to migraine pattern
+            const impact = Math.round((1 - hrvDifference / 10) * 30);
+            riskScore += impact;
+            factors.push({ 
+              name: 'HRV Similar to Migraine Pattern', 
+              impact, 
+              icon: '❤️',
+              detail: `Current: ${Math.round(latestMetric.hrv)}, Migraine avg: ${Math.round(learnedPatterns.avgHRVAtMigraine)}`
+            });
+          }
+        }
+
+        // Stress Risk (compare current to learned migraine average)
+        if (latestMetric.stress && learnedPatterns.avgStressAtMigraine) {
+          const stressDifference = Math.abs(latestMetric.stress - learnedPatterns.avgStressAtMigraine);
+          if (stressDifference < 15) {
+            // Current stress is very close to migraine pattern
+            const impact = Math.round((1 - stressDifference / 15) * 30);
+            riskScore += impact;
+            factors.push({ 
+              name: 'Stress Similar to Migraine Pattern', 
+              impact, 
+              icon: '😰',
+              detail: `Current: ${Math.round(latestMetric.stress)}%, Migraine avg: ${Math.round(learnedPatterns.avgStressAtMigraine)}%`
+            });
+          }
+        }
+
+        // Sleep Quality Risk (compare current to learned migraine average)
+        if (latestMetric.sleepQuality && learnedPatterns.avgSleepQualityAtMigraine) {
+          const sleepDifference = Math.abs(latestMetric.sleepQuality - learnedPatterns.avgSleepQualityAtMigraine);
+          if (sleepDifference < 15) {
+            // Current sleep quality is very close to migraine pattern
+            const impact = Math.round((1 - sleepDifference / 15) * 25);
+            riskScore += impact;
+            factors.push({ 
+              name: 'Sleep Pattern Similar to Migraines', 
+              impact, 
+              icon: '😴',
+              detail: `Current: ${Math.round(latestMetric.sleepQuality)}%, Migraine avg: ${Math.round(learnedPatterns.avgSleepQualityAtMigraine)}%`
+            });
+          }
+        }
+
+        // Screen Time Risk (compare current to learned migraine average)
+        if (latestMetric.screenTime && learnedPatterns.avgScreenTimeAtMigraine) {
+          const screenDifference = Math.abs(latestMetric.screenTime - learnedPatterns.avgScreenTimeAtMigraine);
+          if (screenDifference < 60) { // Within 1 hour
+            // Current screen time is very close to migraine pattern
+            const impact = Math.round((1 - screenDifference / 60) * 15);
+            riskScore += impact;
+            factors.push({ 
+              name: 'Screen Time Similar to Migraines', 
+              impact, 
+              icon: '📱',
+              detail: `Current: ${Math.round(latestMetric.screenTime / 60)}h, Migraine avg: ${Math.round(learnedPatterns.avgScreenTimeAtMigraine / 60)}h`
+            });
+          }
+        }
+
+        // Weather/Pressure Risk (compare current to learned migraine average)
+        if (latestMetric.pressure && learnedPatterns.avgPressureAtMigraine) {
+          const pressureDifference = Math.abs(latestMetric.pressure - learnedPatterns.avgPressureAtMigraine);
+          if (pressureDifference < 10) {
+            // Current pressure is very close to migraine pattern
+            const impact = Math.round((1 - pressureDifference / 10) * 20);
+            riskScore += impact;
+            factors.push({ 
+              name: 'Weather Similar to Migraine Pattern', 
+              impact, 
+              icon: '🌦️',
+              detail: `Current: ${Math.round(latestMetric.pressure)} hPa, Migraine avg: ${Math.round(learnedPatterns.avgPressureAtMigraine)} hPa`
+            });
+          }
+        }
       }
-    }
+    } else {
+      // FALLBACK: Not enough historical data yet, use generic thresholds
+      console.log('⚠️ Not enough migraine history for AI prediction, using generic risk calculation');
 
-    // Screen time factor (0-20 points)
-    if (latestMetric.screenTime && user.baselineMetrics?.avgScreenTime) {
-      const screenIncrease = ((latestMetric.screenTime - user.baselineMetrics.avgScreenTime) / user.baselineMetrics.avgScreenTime) * 100;
-      if (screenIncrease > 20) {
-        const screenImpact = Math.min(screenIncrease, 20);
-        riskScore += screenImpact;
-        factors.push({ name: 'Screen Time', impact: Math.round(screenIncrease), icon: '📱' });
+      // HRV factor (0-30 points)
+      if (latestMetric.hrv) {
+        if (latestMetric.hrv < 40) {
+          riskScore += 30;
+          factors.push({ name: 'Very Low HRV', impact: 30, icon: '❤️' });
+        } else if (latestMetric.hrv < 55) {
+          riskScore += 15;
+          factors.push({ name: 'Low HRV', impact: 15, icon: '❤️' });
+        }
       }
-    }
 
-    // Sleep factor (0-20 points)
-    if (latestMetric.sleepHours && user.baselineMetrics?.avgSleep) {
-      const sleepDebt = user.baselineMetrics.avgSleep - latestMetric.sleepHours;
-      if (sleepDebt > 0.5) {
-        const sleepImpact = Math.min(sleepDebt * 10, 20);
-        riskScore += sleepImpact;
-        factors.push({ name: 'Sleep Debt', impact: Math.round(sleepDebt * 100 / user.baselineMetrics.avgSleep), icon: '😴' });
+      // Stress factor (0-30 points)
+      if (latestMetric.stress) {
+        if (latestMetric.stress > 70) {
+          riskScore += 30;
+          factors.push({ name: 'High Stress', impact: 30, icon: '😰' });
+        } else if (latestMetric.stress > 50) {
+          riskScore += 15;
+          factors.push({ name: 'Moderate Stress', impact: 15, icon: '😰' });
+        }
       }
-    }
 
-    // Stress factor (0-20 points)
-    if (latestMetric.stressLevel === 'high') {
-      riskScore += 20;
-      factors.push({ name: 'Stress Level', impact: 68, icon: '😰' });
-    } else if (latestMetric.stressLevel === 'medium') {
-      riskScore += 10;
-      factors.push({ name: 'Stress Level', impact: 40, icon: '😰' });
-    }
+      // Sleep factor (0-25 points)
+      if (latestMetric.sleepQuality) {
+        if (latestMetric.sleepQuality < 50) {
+          riskScore += 25;
+          factors.push({ name: 'Poor Sleep', impact: 25, icon: '😴' });
+        } else if (latestMetric.sleepQuality < 70) {
+          riskScore += 12;
+          factors.push({ name: 'Below Average Sleep', impact: 12, icon: '�' });
+        }
+      }
 
-    // Weather factor (0-10 points)
-    if (latestMetric.weather?.pressure && latestMetric.weather.pressure < 1010) {
-      riskScore += 10;
-      factors.push({ name: 'Barometric Pressure', impact: 45, icon: '🌦️' });
+      // Weather factor (0-20 points)
+      if (latestMetric.pressure && latestMetric.pressure < 1010) {
+        riskScore += 20;
+        factors.push({ name: 'Low Pressure', impact: 20, icon: '🌦️' });
+      }
     }
 
     // Normalize to 0-100
@@ -613,11 +1008,10 @@ app.get('/api/risk/:clerkId', requireAuth(), async (req, res) => {
       contributingFactors: factors.sort((a, b) => b.impact - a.impact),
       metricsSnapshot: {
         hrv: latestMetric.hrv,
-        sleepHours: latestMetric.sleepHours,
-        stressLevel: latestMetric.stressLevel,
+        sleepHours: latestMetric.sleepDuration ? latestMetric.sleepDuration / 60 : null,
+        stressLevel: latestMetric.stress > 70 ? 'High' : latestMetric.stress > 40 ? 'Medium' : 'Low',
         screenTime: latestMetric.screenTime,
-        calendarLoad: latestMetric.calendarLoad,
-        weather: latestMetric.weather,
+        pressure: latestMetric.pressure,
       },
     });
 
@@ -629,6 +1023,10 @@ app.get('/api/risk/:clerkId', requireAuth(), async (req, res) => {
       riskLevel,
       factors: factors.slice(0, 4), // Top 4 factors
       timestamp: new Date(),
+      aiPrediction: historicalMigraines.length >= 3,
+      message: historicalMigraines.length >= 3 
+        ? `AI prediction based on ${historicalMigraines.length} past migraines`
+        : 'Log more migraines for AI-powered predictions'
     });
   } catch (error) {
     console.error('Error calculating risk:', error);

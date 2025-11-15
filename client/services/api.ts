@@ -76,6 +76,21 @@ export const metricsAPI = {
     const response = await api.get(`/metrics/${clerkId}`, { params: { period } });
     return response.data;
   },
+  
+  // 🔥 NEW: Submit REAL metrics from HealthKit + Weather API
+  submitRealMetrics: async (data: {
+    hrv: number;
+    heartRate: number;
+    stress: number;
+    sleepQuality: number;
+    sleepHours: number;
+    steps: number;
+    latitude: number;
+    longitude: number;
+  }) => {
+    const response = await api.post('/metrics/real', data);
+    return response.data;
+  },
 };
 
 // Risk API
