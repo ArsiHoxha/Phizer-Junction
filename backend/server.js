@@ -1066,19 +1066,22 @@ app.post('/api/ai/analyze', requireAuth(), async (req, res) => {
 
     const analysis = await analyzeHealthData(healthData);
 
-    // Generate audio from the analysis text
+    // Generate audio from the analysis text (optional feature)
     let audioBase64 = null;
     try {
       const audioBuffer = await textToSpeech(analysis.analysis);
-      audioBase64 = audioBuffer.toString('base64');
+      if (audioBuffer) {
+        audioBase64 = audioBuffer.toString('base64');
+      }
     } catch (audioError) {
-      console.error('Audio generation error:', audioError);
+      console.error('⚠️ Audio generation error:', audioError.message);
       // Continue without audio if ElevenLabs fails
     }
 
     res.status(200).json({
       ...analysis,
-      audio: audioBase64 // Base64 encoded audio
+      audio: audioBase64, // Base64 encoded audio (null if unavailable)
+      audioAvailable: audioBase64 !== null
     });
   } catch (error) {
     console.error('Error generating AI analysis:', error);
