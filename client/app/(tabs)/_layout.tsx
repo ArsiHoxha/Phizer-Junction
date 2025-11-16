@@ -103,40 +103,22 @@ export default function TabLayout() {
         }}
       />
       
-      {/* Custom Floating Migraine Log Button */}
+      {/* Voice Assistant Button */}
       <Tabs.Screen
-        name="log-migraine"
+        name="migraine-help"
         options={{
           title: '',
-          tabBarIcon: () => (
+          tabBarIcon: ({ focused }) => (
             <View style={styles.floatingButtonContainer}>
-              <TouchableOpacity
-                onPress={handleQuickLog}
-                disabled={logging}
-                style={[styles.floatingButton, {
-                  shadowColor: '#EF4444',
-                  opacity: logging ? 0.6 : 1,
-                }]}
-                activeOpacity={0.8}
-              >
-                <View style={styles.iconContainer}>
-                  {logging ? (
-                    <Ionicons name="hourglass" size={32} color="#FFFFFF" />
-                  ) : (
-                    <Ionicons name="medical" size={32} color="#FFFFFF" />
-                  )}
-                </View>
-              </TouchableOpacity>
+              <View style={[styles.floatingButton, {
+                backgroundColor: '#EF4444',
+                shadowColor: '#EF4444',
+              }]}>
+                <Ionicons name="mic" size={32} color="#FFFFFF" />
+              </View>
             </View>
           ),
           tabBarLabel: () => null,
-        }}
-        listeners={{
-          tabPress: (e) => {
-            // Prevent navigation
-            e.preventDefault();
-            // Handled by onPress above
-          },
         }}
       />
       <Tabs.Screen
@@ -149,12 +131,29 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'Chat',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
           tabBarIcon: ({ focused, color }) => (
             <Ionicons name={focused ? 'settings' : 'settings-outline'} size={24} color={color} />
           ),
+        }}
+      />
+      
+      {/* Hidden - not displayed in tab bar */}
+      <Tabs.Screen
+        name="log-migraine"
+        options={{
+          href: null, // Hide from tab bar
         }}
       />
     </Tabs>

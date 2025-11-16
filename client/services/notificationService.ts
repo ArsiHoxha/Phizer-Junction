@@ -53,6 +53,7 @@ export class NotificationService {
   static async checkAndNotifyRiskLevel(riskLevel: number): Promise<void> {
     try {
       console.log(`🔔 NotificationService.checkAndNotifyRiskLevel called with: ${riskLevel}%`);
+      console.log(`📱 This notification will show risk: ${riskLevel}% (Should match Dashboard)`);
       
       // HACKATHON DEMO: Always check, reduced cooldown
       const now = Date.now();
@@ -89,6 +90,7 @@ export class NotificationService {
 
       if (shouldNotify) {
         console.log(`📢 Sending notification: ${title} (Risk: ${riskLevel}%)`);
+        console.log(`✅ CONFIRMED: Notification body contains: "${body}"`);
         
         await Notifications.scheduleNotificationAsync({
           content: {

@@ -39,12 +39,13 @@ class GeminiRiskService {
   private model: any;
   private lastCalculation: number = 0;
   private cachedResult: RiskAnalysis | null = null;
-  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_DURATION = 30 * 1000; // 30 seconds
 
   constructor() {
     if (!GEMINI_API_KEY) {
       console.warn('⚠️ Gemini API key not found. Risk calculation will return default values.');
     }
+    console.log('🔑 Gemini API Key configured:', GEMINI_API_KEY ? 'Yes (length: ' + GEMINI_API_KEY.length + ')' : 'No');
     this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
   }
@@ -94,13 +95,13 @@ class GeminiRiskService {
 
       return analysis;
     } catch (error: any) {
-      console.error('❌ Error calculating risk with Gemini:', error);
-      console.error('❌ Error details:', {
-        message: error?.message,
-        stack: error?.stack,
-        name: error?.name,
-      });
-      return this.getDefaultAnalysis(metrics);
+      console.error('❌ Error in Gemini calculateRisk:', error);
+      console.error('❌ Error name:', error?.name);
+      console.error('❌ Error message:', error?.message);
+      console.error('❌ Error stack:', error?.stack);
+      
+      // Re-throw the error so the caller can handle it
+      throw new Error(`Gemini API failed: ${error?.message || 'Unknown error'}`);
     }
   }
 

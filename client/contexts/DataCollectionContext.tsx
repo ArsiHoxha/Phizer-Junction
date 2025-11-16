@@ -205,7 +205,7 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   /**
-   * Collect wearable data (every 5 seconds for real-time updates)
+   * Collect wearable data (every 30 seconds for updates)
    * Uses realistic dataset OR merges Apple Health data if available
    */
   const collectWearableData = async () => {
@@ -258,36 +258,54 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
       let risk = 0; // Initialize risk variable
       
       try {
-        const riskAnalysis = await geminiService.calculateRisk({
+        const metricsForAI = {
           hrv: mergedData.hrv,
           heartRate: mergedData.heartRate,
           stress: mergedData.stress,
           sleepQuality: mergedData.sleepQuality,
           sleepHours: mergedData.sleepHours || 7,
           steps: mergedData.steps || 0,
-          screenTimeMinutes: latestData.phoneData?.screenTimeMinutes || 0,
-          notificationCount: latestData.phoneData?.notificationCount || 0,
+          screenTimeMinutes: latestData?.phoneData?.screenTimeMinutes || 0,
+          notificationCount: latestData?.phoneData?.notificationCount || 0,
           activityLevel: mergedData.activityLevel || 'Moderate',
-          temperature: latestData.weather?.temperature || 20,
-          humidity: latestData.weather?.humidity || 50,
-          pressure: latestData.weather?.pressure || 1013,
-          uvIndex: latestData.weather?.uvIndex || 3,
-          calendarEvents: latestData.calendar?.eventsToday || 0,
-          calendarStress: latestData.calendar?.stressLevel || 30,
-        });
+          temperature: latestData?.weather?.temperature || 20,
+          humidity: latestData?.weather?.humidity || 50,
+          pressure: latestData?.weather?.pressure || 1013,
+          uvIndex: latestData?.weather?.uvIndex || 3,
+          calendarEvents: latestData?.calendar?.eventsToday || 0,
+          calendarStress: latestData?.calendar?.stressLevel || 30,
+        };
+        
+        const riskAnalysis = await geminiService.calculateRisk(metricsForAI);
         
         risk = riskAnalysis.riskScore;
         console.log(`🤖 Gemini AI Risk: ${risk}% (${riskAnalysis.riskLevel})`);
         console.log(`🎯 Triggers: ${riskAnalysis.primaryTriggers.join(', ')}`);
         console.log(`💡 Reasoning: ${riskAnalysis.reasoning}`);
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Gemini AI calculation failed, using fallback');
-        risk = 0; // Fallback if Gemini fails
+        console.error('❌ Error name:', error?.name);
+        console.error('❌ Error message:', error?.message);
+        console.error('❌ Error string:', String(error));
+        
+        // Use simple fallback - basic risk from metrics
+        if (mergedData.hrv < 40) risk += 30;
+        else if (mergedData.hrv < 55) risk += 15;
+        
+        if (mergedData.stress > 70) risk += 30;
+        else if (mergedData.stress > 50) risk += 15;
+        
+        if (mergedData.sleepQuality < 50) risk += 25;
+        else if (mergedData.sleepQuality < 70) risk += 12;
+        
+        risk = Math.min(100, Math.max(10, risk + 20)); // Base 20% + factors
+        console.log(`⚠️ Using fallback risk calculation: ${risk}%`);
       }
       
       const roundedRisk = Math.round(risk);
       console.log(`📊 Final Risk: ${roundedRisk}%`);
       console.log(`📊 Current HRV: ${mergedData.hrv}, Stress: ${mergedData.stress}`);
+      console.log(`✅ Setting currentRisk state to: ${roundedRisk}% (This is what Dashboard will show)`);
       setCurrentRisk(roundedRisk);
       
       const updatedData = { ...latestData, wearable: mergedData };
@@ -298,10 +316,10 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
       await persistCurrentRisk(roundedRisk);
       
       // Automatically check and send notifications with current risk
-      console.log(`🔔 About to call checkAndNotify with risk: ${roundedRisk}%`);
+      console.log(`🔔 About to call checkAndNotify with risk: ${roundedRisk}% (Same value as Dashboard)`);
       await checkAndNotify(roundedRisk);
       
-      // Send to backend every minute (not every 5 seconds to reduce load)
+      // Send to backend every minute (not every 30 seconds to reduce load)
       if (Date.now() % 60000 < 5000) {
         await sendToBackend('/api/metrics/wearable', {
           hrv: mergedData.hrv,
@@ -487,7 +505,7 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
     await NotificationService.requestPermissions();
     await NotificationService.enableNotifications();
     
-    // HACKATHON DEMO MODE: Update ALL data every 5 seconds when using dataset
+    // HACKATHON DEMO MODE: Update ALL data every 30 seconds when using dataset
     if (useDataset) {
       // In demo mode, all data updates together
       wearableInterval.current = setInterval(() => {
@@ -496,7 +514,7 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
         collectWeatherData();
         collectSleepData();
         collectCalendarData();
-      }, 5000);
+      }, 30000); // 30 seconds
       
       // Collect all data immediately
       collectWearableData();
@@ -506,8 +524,8 @@ export const DataCollectionProvider: React.FC<{ children: React.ReactNode }> = (
       collectCalendarData();
     } else {
       // Production mode: Normal intervals
-      // Start wearable data collection (every 5 seconds)
-      wearableInterval.current = setInterval(collectWearableData, 5000);
+      // Start wearable data collection (every 30 seconds)
+      wearableInterval.current = setInterval(collectWearableData, 30000);
       
       // Start phone data collection (every 10 minutes)
       phoneInterval.current = setInterval(collectPhoneData, 10 * 60 * 1000);

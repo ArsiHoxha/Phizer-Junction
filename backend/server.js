@@ -1519,22 +1519,46 @@ async function performAIAnalysisAndLearn(migraineId, clerkId) {
     // Generate AI-powered recommendations based on Gemini insights
     analysis.recommendations = [];
     if (aiText.includes('stress') || analysis.primaryCauses.some(c => c.factor.includes('Stress'))) {
-      analysis.recommendations.push('🧘 Stress Management: Practice deep breathing, meditation, or gentle yoga for 10-15 minutes');
+      analysis.recommendations.push({
+        phase: 'headache',
+        action: '🧘 Stress Management: Practice deep breathing, meditation, or gentle yoga for 10-15 minutes',
+        timing: 'immediate'
+      });
     }
     if (aiText.includes('sleep') || analysis.primaryCauses.some(c => c.factor.includes('Sleep'))) {
-      analysis.recommendations.push('😴 Sleep Priority: Aim for 7-9 hours tonight. Create a dark, cool sleeping environment');
+      analysis.recommendations.push({
+        phase: 'headache',
+        action: '😴 Sleep Priority: Aim for 7-9 hours tonight. Create a dark, cool sleeping environment',
+        timing: 'preventive'
+      });
     }
     if (aiText.includes('screen') || analysis.primaryCauses.some(c => c.factor.includes('Screen'))) {
-      analysis.recommendations.push('📱 Screen Break: Use 20-20-20 rule. Enable blue light filters. Take a 2-hour screen break');
+      analysis.recommendations.push({
+        phase: 'headache',
+        action: '📱 Screen Break: Use 20-20-20 rule. Enable blue light filters. Take a 2-hour screen break',
+        timing: 'immediate'
+      });
     }
     if (aiText.includes('hrv') || analysis.primaryCauses.some(c => c.factor.includes('HRV'))) {
-      analysis.recommendations.push('❤️ HRV Boost: Stay hydrated, do light exercise, practice breathing exercises');
+      analysis.recommendations.push({
+        phase: 'prodrome',
+        action: '❤️ HRV Boost: Stay hydrated, do light exercise, practice breathing exercises',
+        timing: 'preventive'
+      });
     }
     if (aiText.includes('pressure') || aiText.includes('weather')) {
-      analysis.recommendations.push('🌤️ Weather Watch: Monitor forecasts. Take preventive medication during pressure drops');
+      analysis.recommendations.push({
+        phase: 'prodrome',
+        action: '🌤️ Weather Watch: Monitor forecasts. Take preventive medication during pressure drops',
+        timing: 'preventive'
+      });
     }
     if (aiText.includes('hydration') || aiText.includes('water')) {
-      analysis.recommendations.push('💧 Hydration: Drink 8 glasses of water today to prevent dehydration triggers');
+      analysis.recommendations.push({
+        phase: 'headache',
+        action: '💧 Hydration: Drink 8 glasses of water today to prevent dehydration triggers',
+        timing: 'immediate'
+      });
     }
 
     // Find similar patterns in history
@@ -1702,19 +1726,39 @@ async function performAIAnalysis(migraineId, clerkId) {
 
     // Generate recommendations
     if (analysis.primaryCauses.some(c => c.factor.includes('Stress'))) {
-      analysis.recommendations.push('Practice stress-reduction techniques like deep breathing, meditation, or gentle yoga.');
+      analysis.recommendations.push({
+        phase: 'headache',
+        action: 'Practice stress-reduction techniques like deep breathing, meditation, or gentle yoga.',
+        timing: 'immediate'
+      });
     }
     if (analysis.primaryCauses.some(c => c.factor.includes('Sleep'))) {
-      analysis.recommendations.push('Prioritize 7-9 hours of quality sleep. Consider a consistent bedtime routine.');
+      analysis.recommendations.push({
+        phase: 'headache',
+        action: 'Prioritize 7-9 hours of quality sleep. Consider a consistent bedtime routine.',
+        timing: 'preventive'
+      });
     }
     if (analysis.primaryCauses.some(c => c.factor.includes('Screen'))) {
-      analysis.recommendations.push('Take regular breaks from screens using the 20-20-20 rule. Use blue light filters.');
+      analysis.recommendations.push({
+        phase: 'headache',
+        action: 'Take regular breaks from screens using the 20-20-20 rule. Use blue light filters.',
+        timing: 'immediate'
+      });
     }
     if (analysis.primaryCauses.some(c => c.factor.includes('HRV'))) {
-      analysis.recommendations.push('Improve HRV through regular exercise, proper hydration, and stress management.');
+      analysis.recommendations.push({
+        phase: 'prodrome',
+        action: 'Improve HRV through regular exercise, proper hydration, and stress management.',
+        timing: 'preventive'
+      });
     }
     if (analysis.primaryCauses.some(c => c.factor.includes('Pressure'))) {
-      analysis.recommendations.push('Monitor weather forecasts and take preventive measures during low-pressure systems.');
+      analysis.recommendations.push({
+        phase: 'prodrome',
+        action: 'Monitor weather forecasts and take preventive measures during low-pressure systems.',
+        timing: 'preventive'
+      });
     }
 
     // Find similar patterns in history
@@ -1762,6 +1806,217 @@ async function performAIAnalysis(migraineId, clerkId) {
     console.error('Error in AI analysis:', error);
   }
 }
+
+// ==================== MIGRAINE HELP VOICE ASSISTANT ====================
+
+// Transcribe audio using ElevenLabs Speech-to-Text
+app.post('/api/ai/transcribe-elevenlabs', requireAuth(), async (req, res) => {
+  try {
+    const multer = require('multer');
+    const upload = multer({ storage: multer.memoryStorage() });
+    
+    upload.single('audio')(req, res, async (err) => {
+      if (err) {
+        return res.status(400).json({ error: 'File upload error' });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No audio file provided' });
+      }
+
+      const FormData = require('form-data');
+      const formData = new FormData();
+      formData.append('audio', req.file.buffer, {
+        filename: 'audio.m4a',
+        contentType: req.file.mimetype,
+      });
+      formData.append('model_id', 'eleven_multilingual_v2');
+
+      const axios = require('axios');
+      const response = await axios.post(
+        'https://api.elevenlabs.io/v1/speech-to-text',
+        formData,
+        {
+          headers: {
+            ...formData.getHeaders(),
+            'xi-api-key': process.env.ELEVENLABS_API_KEY || 'sk_46e01cad85b2f7f1e2c8570535befc8e23be2411dc5c11e0',
+          },
+        }
+      );
+
+      res.json({ text: response.data.text });
+    });
+  } catch (error) {
+    console.error('ElevenLabs transcription error:', error);
+    res.status(500).json({ 
+      error: 'Transcription failed',
+      text: 'Could you please repeat that?'
+    });
+  }
+});
+
+// Get AI migraine help response using Gemini 2.5 Flash
+app.post('/api/ai/migraine-help', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { message, conversationHistory } = req.body;
+
+    // Get user's recent data for context
+    const latestMetric = await Metric.findOne({ userId })
+      .sort({ timestamp: -1 })
+      .limit(1);
+
+    const recentMigraines = await MigraineLog.find({ userId })
+      .sort({ timestamp: -1 })
+      .limit(3);
+
+    // Build context for AI
+    let context = `You are a compassionate migraine care assistant helping someone who may be experiencing or worried about a migraine. 
+Be warm, empathetic, supportive, and provide practical, actionable advice in a conversational tone.
+
+IMPORTANT: Keep responses SHORT (2-3 sentences max). Focus on immediate help.
+
+User's Current Health Data:`;
+
+    if (latestMetric) {
+      context += `
+- Heart Rate Variability (HRV): ${Math.round(latestMetric.wearable?.hrv || 0)}ms ${latestMetric.wearable?.hrv < 45 ? '(LOW - nervous system stressed)' : '(Good)'}
+- Stress Level: ${Math.round(latestMetric.wearable?.stress || 0)}% ${latestMetric.wearable?.stress > 70 ? '(HIGH)' : ''}
+- Sleep Last Night: ${((latestMetric.sleep?.totalSleepMinutes || 0) / 60).toFixed(1)} hours ${(latestMetric.sleep?.totalSleepMinutes || 0) < 360 ? '(Poor - sleep deprivation)' : ''}
+- Screen Time Today: ${((latestMetric.phone?.screenTimeMinutes || 0) / 60).toFixed(1)} hours`;
+    }
+
+    if (recentMigraines.length > 0) {
+      context += `\n\nRecent Migraine History (last 3):`;
+      recentMigraines.forEach((m, i) => {
+        const daysAgo = Math.floor((Date.now() - new Date(m.timestamp)) / (1000 * 60 * 60 * 24));
+        context += `\n${i + 1}. ${daysAgo} days ago - Severity: ${m.severity}/10${m.triggers?.length ? `, Triggers: ${m.triggers.slice(0, 2).join(', ')}` : ''}`;
+      });
+    }
+
+    // Build conversation for Gemini
+    let conversationText = '';
+    
+    if (conversationHistory && conversationHistory.length > 0) {
+      conversationHistory.slice(-4).forEach(msg => {
+        conversationText += `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}\n`;
+      });
+    }
+    
+    conversationText += `User: ${message}\n`;
+
+    // Get response from Gemini 2.5 Flash
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-2.0-flash-exp',
+      generationConfig: {
+        temperature: 0.9,
+        topP: 0.95,
+        maxOutputTokens: 150,
+      }
+    });
+
+    const prompt = `${context}
+
+Conversation:
+${conversationText}
+
+Provide a caring, practical response (MAX 2-3 sentences). Focus on:
+1. Immediate relief (dark room, hydration, medication timing)
+2. When to seek urgent medical help (if symptoms are severe/unusual)
+3. Emotional support and reassurance
+4. Preventive measures if relevant
+
+Be conversational, empathetic, and like a caring friend who understands migraines.`;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
+
+    res.json({ response: response.trim() });
+  } catch (error) {
+    console.error('Gemini migraine help error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get response',
+      response: 'I understand you\'re going through a tough time. Try resting in a dark, quiet room and stay hydrated. If the pain feels different or severe, please reach out to a healthcare provider. You\'re not alone in this.'
+    });
+  }
+});
+
+// General AI Chat - Health Assistant
+app.post('/api/ai/chat', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { message, conversationHistory } = req.body;
+
+    // Get user's recent health data for context
+    const latestMetric = await Metric.findOne({ userId })
+      .sort({ timestamp: -1 })
+      .limit(1);
+
+    const recentMigraines = await MigraineLog.find({ userId })
+      .sort({ timestamp: -1 })
+      .limit(3);
+
+    // Build health context
+    let healthContext = '';
+    if (latestMetric) {
+      healthContext = `
+User's Recent Health Snapshot:
+- HRV: ${Math.round(latestMetric.wearable?.hrv || 0)}ms ${latestMetric.wearable?.hrv < 45 ? '(low - stress indicator)' : '(healthy)'}
+- Stress Level: ${Math.round(latestMetric.wearable?.stress || 0)}% ${latestMetric.wearable?.stress > 70 ? '(HIGH)' : ''}
+- Sleep: ${((latestMetric.sleep?.totalSleepMinutes || 0) / 60).toFixed(1)} hours last night
+- Screen Time: ${((latestMetric.phone?.screenTimeMinutes || 0) / 60).toFixed(1)} hours today
+- Recent Migraines: ${recentMigraines.length} in recent history`;
+    }
+
+    // Build conversation text
+    const conversationText = conversationHistory
+      .slice(-4)
+      .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+      .join('\n');
+
+    // Use Gemini 2.0 Flash Exp
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-2.0-flash-exp',
+      generationConfig: {
+        temperature: 0.9,
+        topP: 0.95,
+        maxOutputTokens: 200,
+      }
+    });
+
+    const prompt = `You are a knowledgeable, friendly health assistant for a migraine management app. You provide helpful advice about general health, wellness, stress management, sleep, nutrition, and migraine prevention.
+
+${healthContext}
+
+Recent Conversation:
+${conversationText}
+User: ${message}
+
+Provide a helpful, conversational response (2-4 sentences). Be:
+- Warm and supportive
+- Evidence-based when giving health advice
+- Encouraging about healthy habits
+- Clear about when to consult a healthcare provider
+- Specific and actionable when possible
+
+If the user's health data shows concerning patterns, gently mention it with suggestions.`;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
+
+    res.json({ response: response.trim() });
+  } catch (error) {
+    console.error('Gemini chat error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get response',
+      response: 'I\'m here to help! I can provide advice on managing migraines, improving sleep, reducing stress, and maintaining healthy habits. What would you like to know about?'
+    });
+  }
+});
 
 // ==================== START SERVER ====================
 
