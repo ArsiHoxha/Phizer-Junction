@@ -17,11 +17,12 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BACKEND_URL = 'https://phizer-junction.onrender.com';
-const ELEVENLABS_API_KEY = 'sk_46e01cad85b2f7f1e2c8570535befc8e23be2411dc5c11e0'; // Your ElevenLabs key
+const ELEVENLABS_API_KEY = 'sk_a547173ffd906dbb9e9450c126cdae4ed273a6b669966081'; // Your ElevenLabs key
 const ELEVENLABS_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Sarah voice - empathetic, caring tone
 
 export default function MigraineHelpScreen() {
-  const { isDark } = useColorScheme();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -146,13 +147,21 @@ export default function MigraineHelpScreen() {
     try {
       const token = await getToken();
       
-      // Read audio file as blob
-      const response = await fetch(audioUri);
-      const audioBlob = await response.blob();
-
-      // Send to backend for ElevenLabs transcription
+      console.log('Audio URI:', audioUri);
+      
+      // Create form data with the audio file
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.m4a');
+      
+      // For mobile, we need to properly format the file
+      const filename = audioUri.split('/').pop() || 'recording.m4a';
+      
+      formData.append('audio', {
+        uri: audioUri,
+        type: 'audio/x-m4a',
+        name: filename,
+      } as any);
+
+      console.log('Sending audio to backend for transcription...');
 
       const transcriptionResponse = await axios.post(
         `${BACKEND_URL}/api/ai/transcribe-elevenlabs`,
@@ -162,12 +171,14 @@ export default function MigraineHelpScreen() {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'multipart/form-data',
           },
+          timeout: 30000, // 30 second timeout
         }
       );
 
+      console.log('Transcription response:', transcriptionResponse.data);
       return transcriptionResponse.data.text || 'Could not transcribe audio';
-    } catch (error) {
-      console.error('Transcription error:', error);
+    } catch (error: any) {
+      console.error('Transcription error:', error?.response?.data || error.message);
       return 'I couldn\'t hear that clearly. Could you try again?';
     }
   };

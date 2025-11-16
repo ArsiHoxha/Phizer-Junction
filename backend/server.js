@@ -1816,13 +1816,25 @@ const uploadSTT = multerSTT({ storage: multerSTT.memoryStorage() });
 app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No audio file provided' });
+      return res.status(400).json({ 
+        error: 'No audio file provided',
+        text: 'Could you please repeat that?'
+      });
     }
 
     console.log('Received audio file:', {
       size: req.file.size,
       mimetype: req.file.mimetype,
     });
+
+    // Check if audio file is empty
+    if (!req.file.buffer || req.file.size === 0) {
+      console.error('Empty audio file received');
+      return res.status(400).json({ 
+        error: 'Empty audio file',
+        text: 'No audio detected. Please try recording again.'
+      });
+    }
 
     const WebSocket = require('ws');
     const audioBuffer = req.file.buffer;
@@ -1832,6 +1844,8 @@ app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio
     
     // ElevenLabs API key - fallback to hardcoded if env var not set
     const elevenLabsKey = process.env.ELEVENLABS_API_KEY || 'sk_a547173ffd906dbb9e9450c126cdae4ed273a6b669966081';
+    
+    console.log('Connecting to ElevenLabs with audio size:', audioBase64.length);
     
     // Connect to ElevenLabs WebSocket
     const ws = new WebSocket(
