@@ -29,7 +29,7 @@ const slides: OnboardingSlide[] = [
     id: '2',
     icon: 'fitness',
     title: 'Comprehensive Health Tracking',
-    description: 'Monitor heart rate variability, sleep quality, stress levels, and more. Connect with Apple Health or use your phone sensors for seamless data collection.',
+    description: 'Monitor heart rate variability, sleep quality, stress levels, and more. Connect with Apple Health or use your phone sensors for seamless data collection.\n\nNote: Apple Health integration is in beta - we couldn\'t fully test it as we didn\'t have an Apple Watch available.',
     gradient: ['#10B981', '#059669'],
     iconColor: '#10B981',
   },
@@ -40,14 +40,6 @@ const slides: OnboardingSlide[] = [
     description: 'Discover your unique migraine triggers and patterns. Get real-time alerts and actionable recommendations tailored to your lifestyle.',
     gradient: ['#F59E0B', '#D97706'],
     iconColor: '#F59E0B',
-  },
-  {
-    id: '4',
-    icon: 'megaphone',
-    title: 'Voice Alerts & Support',
-    description: 'Receive voice-guided alerts when risk levels are high. Access instant help with our Migraine Help feature for quick relief guidance.',
-    gradient: ['#8B5CF6', '#6D28D9'],
-    iconColor: '#8B5CF6',
   },
 ];
 

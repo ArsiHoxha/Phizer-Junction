@@ -393,23 +393,6 @@ export default function SettingsScreen() {
                 <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={handleExportDataset}
-                className="flex-row items-center p-3 rounded-2xl mb-2"
-                style={{ backgroundColor: isDark ? '#1a1a1a' : '#f3f4f6' }}
-                activeOpacity={0.7}
-                disabled={exportingDataset}
-              >
-                <Ionicons name="download-outline" size={20} color={colors.primary} />
-                <Text style={{ color: colors.text }} className="text-sm ml-3 flex-1">
-                  {exportingDataset ? 'Exporting...' : 'Export to CSV'}
-                </Text>
-                {exportingDataset ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-                )}
-              </TouchableOpacity>
 
               {useDataset && (
                 <TouchableOpacity
@@ -815,54 +798,6 @@ export default function SettingsScreen() {
         </View>
 
         {/* Quick Actions */}
-        <View className="px-6 mb-6">
-          <Text style={{ color: colors.textSecondary }} className="text-xs font-semibold uppercase mb-3">
-            Quick Actions
-          </Text>
-          
-          <TouchableOpacity
-            onPress={handleResetOnboarding}
-            style={{ 
-              backgroundColor: isDark ? '#000000' : colors.card, 
-              borderColor: isDark ? '#2D2D2D' : colors.border 
-            }}
-            className="rounded-3xl p-4 border mb-3"
-            activeOpacity={0.7}
-          >
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <Text style={{ color: colors.text }} className="text-sm font-semibold mb-0.5">
-                  Reset Onboarding
-                </Text>
-                <Text style={{ color: colors.textSecondary }} className="text-xs">
-                  Update permissions and preferences
-                </Text>
-              </View>
-              <Text style={{ color: colors.textSecondary }} className="text-xl">→</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{ 
-              backgroundColor: isDark ? '#000000' : colors.card, 
-              borderColor: isDark ? '#2D2D2D' : colors.border 
-            }}
-            className="rounded-3xl p-4 border"
-            activeOpacity={0.7}
-          >
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <Text style={{ color: colors.text }} className="text-sm font-semibold mb-0.5">
-                  Export Data
-                </Text>
-                <Text style={{ color: colors.textSecondary }} className="text-xs">
-                  Download your health records
-                </Text>
-              </View>
-              <Text style={{ color: colors.textSecondary }} className="text-xl">→</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
 
         {/* Privacy */}
         <View className="px-6 mb-6">

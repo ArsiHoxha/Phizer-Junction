@@ -2016,7 +2016,8 @@ User's Current Health Data:`;
 
     // Get response from Gemini 2.5 Flash
     const { GoogleGenerativeAI } = require('@google/generative-ai');
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const geminiKey = process.env.GEMINI_API_KEY || 'AIzaSyBSdVxGTpV1mF9TX75ddzTdDdpD7IW5dXA';
+    const genAI = new GoogleGenerativeAI(geminiKey);
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.5-flash-lite',
       generationConfig: {
@@ -2087,7 +2088,8 @@ User's Recent Health Snapshot:
 
     // Use Gemini 2.0 Flash Exp
     const { GoogleGenerativeAI } = require('@google/generative-ai');
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const geminiKey = process.env.GEMINI_API_KEY || 'AIzaSyBSdVxGTpV1mF9TX75ddzTdDdpD7IW5dXA';
+    const genAI = new GoogleGenerativeAI(geminiKey);
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.5-flash-lite',
       generationConfig: {

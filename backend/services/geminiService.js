@@ -1,7 +1,8 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Initialize Gemini AI with your API key
-const genAI = new GoogleGenerativeAI('AIzaSyCR2rMxmJxiC44jnCtvfS-bqLGJhoXQq4c');
+const geminiKey = process.env.GEMINI_API_KEY || 'AIzaSyBSdVxGTpV1mF9TX75ddzTdDdpD7IW5dXA';
+const genAI = new GoogleGenerativeAI(geminiKey);
 
 async function analyzeHealthData(healthData) {
   try {

@@ -175,44 +175,44 @@ export default function MigraineHelpScreen() {
         return 'The recording is empty. Please try speaking again.';
       }
       
-      // Create form data with the audio file
+      // Read the file as base64
+      const base64Audio = await FileSystem.readAsStringAsync(audioUri, {
+        encoding: 'base64',
+      });
+      
+      console.log('Base64 audio length:', base64Audio.length);
+      
+      // Convert base64 to blob
+      const byteCharacters = atob(base64Audio);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'audio/m4a' });
+      
+      console.log('Blob size:', blob.size);
+      
+      // Create form data with the blob
       const formData = new FormData();
-      
-      // For mobile, we need to properly format the file
-      const filename = audioUri.split('/').pop() || 'recording.m4a';
-      
-      // Properly format for React Native
-      const file = {
-        uri: Platform.OS === 'ios' ? audioUri.replace('file://', '') : audioUri,
-        type: 'audio/m4a',
-        name: filename,
-      };
-      
-      formData.append('audio', file as any);
+      formData.append('audio', blob, 'recording.m4a');
 
-      console.log('Sending audio to backend:', {
-        uri: file.uri,
-        type: file.type,
-        name: file.name,
-        size: fileInfo.size,
+      console.log('Sending audio to backend...');
+
+      const response = await fetch(`${BACKEND_URL}/api/ai/transcribe-elevenlabs`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
       });
 
-      const transcriptionResponse = await axios.post(
-        `${BACKEND_URL}/api/ai/transcribe-elevenlabs`,
-        formData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-          timeout: 30000, // 30 second timeout
-        }
-      );
-
-      console.log('Transcription response:', transcriptionResponse.data);
-      return transcriptionResponse.data.text || 'Could not transcribe audio';
+      const data = await response.json();
+      console.log('Transcription response:', data);
+      
+      return data.text || 'Could not transcribe audio';
     } catch (error: any) {
-      console.error('Transcription error:', error?.response?.data || error.message);
+      console.error('Transcription error:', error?.message || error);
       return 'I couldn\'t hear that clearly. Could you try again?';
     }
   };

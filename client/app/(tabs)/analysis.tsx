@@ -90,16 +90,6 @@ export default function AnalysisScreen() {
     let dataPoints = historicalData;
     const now = new Date();
     
-    if (selectedPeriod === '24h') {
-      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      dataPoints = historicalData.filter(d => new Date(d.timestamp) >= oneDayAgo);
-    } else if (selectedPeriod === '7d') {
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      dataPoints = historicalData.filter(d => new Date(d.timestamp) >= sevenDaysAgo);
-    } else if (selectedPeriod === '30d') {
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      dataPoints = historicalData.filter(d => new Date(d.timestamp) >= thirtyDaysAgo);
-    }
 
     // Take last 15 points for better visualization
     const displayPoints = dataPoints.slice(-15);
@@ -163,31 +153,6 @@ export default function AnalysisScreen() {
           </ScrollView>
         </View>
 
-        {/* Period Selector */}
-        <View className="px-6 mb-6">
-          <View style={{ backgroundColor: isDark ? '#000000' : '#f3f4f6' }} className="flex-row rounded-full p-1">
-            {periods.map((period) => (
-              <TouchableOpacity
-                key={period}
-                onPress={() => setSelectedPeriod(period)}
-                style={{ backgroundColor: selectedPeriod === period ? (isDark ? '#FFFFFF' : '#000000') : 'transparent' }}
-                className="flex-1 py-2 rounded-full"
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={{
-                    color: selectedPeriod === period 
-                      ? (isDark ? '#000000' : '#FFFFFF') 
-                      : (isDark ? '#9CA3AF' : '#6B7280')
-                  }}
-                  className="text-center text-sm font-semibold"
-                >
-                  {period}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
 
         {/* Health Category */}
         {selectedCategory === 'health' && (

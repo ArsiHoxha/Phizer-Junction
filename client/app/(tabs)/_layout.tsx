@@ -103,33 +103,22 @@ export default function TabLayout() {
         }}
       />
       
-      {/* Voice Assistant Button */}
+      {/* Voice Assistant Button - Hidden */}
       <Tabs.Screen
         name="migraine-help"
         options={{
-          title: '',
-          tabBarIcon: ({ focused }) => (
-            <View style={styles.floatingButtonContainer}>
-              <View style={[styles.floatingButton, {
-                backgroundColor: '#EF4444',
-                shadowColor: '#EF4444',
-              }]}>
-                <Ionicons name="mic" size={32} color="#FFFFFF" />
-              </View>
-            </View>
-          ),
-          tabBarLabel: () => null,
+          href: null, // Hide from tab bar
         }}
       />
+      
+      {/* Explore - Hidden (not implemented) */}
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ focused, color }) => (
-            <Ionicons name={focused ? 'compass' : 'compass-outline'} size={24} color={color} />
-          ),
+          href: null, // Hide from tab bar
         }}
       />
+      
       <Tabs.Screen
         name="settings"
         options={{
@@ -143,6 +132,14 @@ export default function TabLayout() {
       {/* Hidden - not displayed in tab bar */}
       <Tabs.Screen
         name="log-migraine"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
+      
+      {/* Chat - Hidden */}
+      <Tabs.Screen
+        name="chat"
         options={{
           href: null, // Hide from tab bar
         }}
