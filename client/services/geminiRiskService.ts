@@ -6,7 +6,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || 'AIzaSyBSdVxGTpV1mF9TX75ddzTdDdpD7IW5dXA';
+const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
 interface HealthMetrics {
   hrv: number;
@@ -43,9 +43,9 @@ class GeminiRiskService {
 
   constructor() {
     if (!GEMINI_API_KEY) {
-      console.warn('⚠️ Gemini API key not found. Risk calculation will return default values.');
+      throw new Error('⚠️ Gemini API key not found. Please set EXPO_PUBLIC_GEMINI_API_KEY environment variable.');
     }
-    console.log('🔑 Gemini API Key configured:', GEMINI_API_KEY ? 'Yes (length: ' + GEMINI_API_KEY.length + ')' : 'No');
+    console.log('🔑 Gemini API Key configured: Yes (length: ' + GEMINI_API_KEY.length + ')');
     this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
   }

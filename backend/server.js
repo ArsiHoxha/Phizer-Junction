@@ -12,8 +12,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Clerk Keys
-const CLERK_PUBLISHABLE_KEY = process.env.CLERK_PUBLISHABLE_KEY || 'pk_test_bGVhZGluZy1veXN0ZXItMTguY2xlcmsuYWNjb3VudHMuZGV2JA';
-const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || 'sk_test_IBuDewVmhzJ8xwET2CUgyoiIEenNcM0kBs13zmM2BD';
+const CLERK_PUBLISHABLE_KEY = process.env.CLERK_PUBLISHABLE_KEY;
+const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
 
 // Middleware
 app.use(cors());
@@ -24,7 +24,7 @@ app.use(clerkMiddleware({
 }));
 
 // MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arsihoxha23:Arsi159753@cluster0.60zdjwh.mongodb.net/cjunction_ios';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ Connected to MongoDB'))
@@ -1856,7 +1856,15 @@ app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio
     const audioBase64 = audioBuffer.toString('base64');
     
     // ElevenLabs API key - fallback to hardcoded if env var not set
-    const elevenLabsKey = process.env.ELEVENLABS_API_KEY || 'sk_a547173ffd906dbb9e9450c126cdae4ed273a6b669966081';
+    const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
+    
+    if (!elevenLabsKey) {
+      console.error('ElevenLabs API key not configured');
+      return res.status(503).json({ 
+        error: 'Speech-to-text service not configured',
+        text: 'Voice transcription is temporarily unavailable.'
+      });
+    }
     
     console.log('Connecting to ElevenLabs with audio size:', audioBase64.length);
     
@@ -1865,6 +1873,7 @@ app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio
       `wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2`,
       {
         headers: {
+          'xi-api-key': elevenLabsKey,
           'xi-api-key': elevenLabsKey,
         },
       }
@@ -2016,7 +2025,12 @@ User's Current Health Data:`;
 
     // Get response from Gemini 2.5 Flash
     const { GoogleGenerativeAI } = require('@google/generative-ai');
-    const geminiKey = process.env.GEMINI_API_KEY || 'AIzaSyBSdVxGTpV1mF9TX75ddzTdDdpD7IW5dXA';
+    const geminiKey = process.env.GEMINI_API_KEY;
+    
+    if (!geminiKey) {
+      throw new Error('Gemini API key not configured');
+    }
+    
     const genAI = new GoogleGenerativeAI(geminiKey);
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.5-flash-lite',
@@ -2088,7 +2102,12 @@ User's Recent Health Snapshot:
 
     // Use Gemini 2.0 Flash Exp
     const { GoogleGenerativeAI } = require('@google/generative-ai');
-    const geminiKey = process.env.GEMINI_API_KEY || 'AIzaSyBSdVxGTpV1mF9TX75ddzTdDdpD7IW5dXA';
+    const geminiKey = process.env.GEMINI_API_KEY;
+    
+    if (!geminiKey) {
+      throw new Error('Gemini API key not configured');
+    }
+    
     const genAI = new GoogleGenerativeAI(geminiKey);
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.5-flash-lite',

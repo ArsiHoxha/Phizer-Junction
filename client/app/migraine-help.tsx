@@ -18,7 +18,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 
 const BACKEND_URL = 'https://phizer-junction.onrender.com';
-const ELEVENLABS_API_KEY = 'sk_a547173ffd906dbb9e9450c126cdae4ed273a6b669966081'; // Your ElevenLabs key
 const ELEVENLABS_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Sarah voice - empathetic, caring tone
 
 export default function MigraineHelpScreen() {
@@ -285,7 +284,7 @@ export default function MigraineHelpScreen() {
         },
         {
           headers: {
-            'xi-api-key': ELEVENLABS_API_KEY,
+            'xi-api-key': process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY || '',
             'Content-Type': 'application/json',
           },
           responseType: 'arraybuffer',
