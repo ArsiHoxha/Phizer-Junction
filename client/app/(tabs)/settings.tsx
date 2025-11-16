@@ -661,11 +661,16 @@ export default function SettingsScreen() {
               <View className="flex-row items-center mb-3">
                 <Ionicons name="fitness" size={24} color={appleHealthConnected ? '#22C55E' : colors.textSecondary} />
                 <View className="flex-1 ml-3">
-                  <Text style={{ color: colors.text }} className="text-sm font-semibold">
-                    Apple Health
-                  </Text>
+                  <View className="flex-row items-center mb-1">
+                    <Text style={{ color: colors.text }} className="text-sm font-semibold">
+                      Apple Health
+                    </Text>
+                    <View className="bg-orange-100 px-2 py-0.5 rounded-full ml-2">
+                      <Text className="text-orange-600 text-[10px] font-semibold">BETA</Text>
+                    </View>
+                  </View>
                   <Text style={{ color: colors.textSecondary }} className="text-xs">
-                    {appleHealthConnected ? 'Connected' : 'Not connected'}
+                    {appleHealthConnected ? 'Connected' : 'Not tested - No Apple Watch'}
                   </Text>
                 </View>
                 <View className={`w-2 h-2 rounded-full ${appleHealthConnected ? 'bg-green-500' : 'bg-gray-400'}`} />

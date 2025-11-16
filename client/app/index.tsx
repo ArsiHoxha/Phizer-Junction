@@ -16,8 +16,8 @@ export default function WelcomeScreen() {
   }, [isLoaded, isSignedIn]);
 
   const handleGetStarted = () => {
-    // Go directly to onboarding
-    router.push('/onboarding/permissions');
+    // Go to intro screens first, then onboarding
+    router.push('/onboarding/intro');
   };
 
   // Don't render the welcome screen if user is signed in

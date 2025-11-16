@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Dimensions, SafeAreaView, Modal, ActivityIndicator, Alert } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
 import { LineChart } from 'react-native-gifted-charts';
 import { CircularProgress } from 'react-native-circular-progress';
 import { useDataCollection } from '../../contexts/DataCollectionContext';
@@ -15,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NotificationService } from '../../services/notificationService';
 import WidgetDataService from '../../services/widgetDataService';
 import { userAPI, setAuthToken } from '../../services/api';
+import * as StreakService from '../../services/streakService';
 import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
@@ -47,11 +47,16 @@ export default function DashboardScreen() {
   const [userTriggers, setUserTriggers] = useState<string[]>([]);
   const [loadingTriggers, setLoadingTriggers] = useState(true);
 
+  // Streak tracking
+  const [streakData, setStreakData] = useState<StreakService.StreakData | null>(null);
+  const [showStreakModal, setShowStreakModal] = useState(false);
+
   // Load intake data and request permissions on mount
   useEffect(() => {
     loadIntakeData();
     requestNotificationPermissions();
     loadUserTriggers();
+    loadAndRecordStreak();
   }, []);
 
   // NOTE: Notifications are now handled in DataCollectionContext
@@ -113,6 +118,16 @@ export default function DashboardScreen() {
       setUserTriggers([]);
     } finally {
       setLoadingTriggers(false);
+    }
+  };
+
+  const loadAndRecordStreak = async () => {
+    try {
+      const data = await StreakService.recordAppOpen();
+      setStreakData(data);
+      console.log('📅 Streak loaded:', data);
+    } catch (error) {
+      console.error('Error loading streak:', error);
     }
   };
 
@@ -1036,81 +1051,155 @@ export default function DashboardScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Gradient Background */}
-      <LinearGradient
-        colors={isDark 
-          ? ['#1a1a1a', '#2a2a2a', '#1a1a1a'] 
-          : ['#f8f9fa', '#e5e7eb', '#f3f4f6', '#f8f9fa']
-        }
-        locations={[0, 0.3, 0.7, 1]}
-        style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+      {/* Background */}
+      <View
+        style={{ 
+          position: 'absolute', 
+          left: 0, 
+          right: 0, 
+          top: 0, 
+          bottom: 0,
+          backgroundColor: isDark ? '#1a1a1a' : '#f8f9fa'
+        }}
       />
       
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         
         <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-          {/* Header with Gradient Overlay */}
+          {/* Header */}
           <View className="px-6 pt-12 pb-4">
-            {/* Title Row */}
-            <View className="flex-row items-center justify-between mb-1">
+            {/* Title Row with Streak Counter */}
+            <View className="flex-row items-center justify-between mb-3">
               <View className="flex-1">
                 <Text style={{ color: colors.text }} className="text-3xl font-bold">
                   Migraine Guardian
                 </Text>
               </View>
+              
+              {/* Streak Counter - Top Right */}
+              {streakData && streakData.currentStreak > 0 && (
+                <TouchableOpacity
+                onPress={() => setShowStreakModal(true)}
+                style={{
+                  backgroundColor: isDark ? '#1F1F1F' : '#FFFFFF',
+                  borderWidth: 2,
+                  borderColor: '#F59E0B',
+                }}
+                className="w-12 h-12 rounded-full items-center justify-center"
+              >
+                <Ionicons name="flame" size={20} color="#F59E0B" />
+                <Text style={{ color: '#F59E0B' }} className="text-[10px] font-bold">
+                  {streakData.currentStreak}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
           
-          <Text style={{ color: colors.textSecondary }} className="text-sm mb-3">
+          <Text style={{ color: colors.textSecondary }} className="text-sm mb-4">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </Text>
           
+          {/* Streak Timeline - Below Title */}
+          {streakData && (
+            <View 
+              style={{ 
+                backgroundColor: isDark ? '#1F1F1F' : '#FFFFFF',
+                borderRadius: 12,
+                padding: 10,
+                marginBottom: 12,
+                borderWidth: 1,
+                borderColor: isDark ? '#2D2D2D' : '#E5E7EB',
+              }}
+              className="mx-6"
+            >
+              <View className="flex-row justify-between items-center">
+                {StreakService.getLast7Days(streakData).map((day, index) => {
+                  const date = new Date(day.date);
+                  const dayNum = date.getDate();
+                  const isPast = new Date(day.date) < new Date(new Date().setHours(0, 0, 0, 0));
+                  const isMissed = isPast && !day.opened;
+                  
+                  return (
+                    <View key={index} className="items-center">
+                      <View
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 18,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderWidth: day.isToday ? 2 : 0,
+                          borderColor: '#F59E0B',
+                          backgroundColor: day.opened 
+                            ? (day.isToday ? '#F59E0B' : '#10B981')
+                            : isMissed 
+                              ? '#d5d5d5ff'
+                              : (isDark ? '#2D2D2D' : '#E5E7EB')
+                        }}
+                      >
+                        {day.opened || isMissed ? (
+                          <Text 
+                            style={{ color: '#FFFFFF' }} 
+                            className="text-sm font-bold"
+                          >
+                            {dayNum}
+                          </Text>
+                        ) : (
+                          <Text 
+                            style={{ color: isDark ? '#6B7280' : '#9CA3AF' }} 
+                            className="text-sm font-semibold"
+                          >
+                            {dayNum}
+                          </Text>
+                        )}
+                      </View>
+                      <Text 
+                        style={{ color: colors.textSecondary }} 
+                        className="text-xs mt-1"
+                      >
+                        {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' })[0]}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+          
         </View>
 
-        {/* Risk Index Card with Gradient */}
+        {/* Risk Index Card */
         <Animated.View 
           entering={FadeInDown.duration(800)}
-          className="mx-6 mb-4"
+          className="mx-6 mb-3"
         >
-          <LinearGradient
-            colors={
-              riskLevel >= 70 
-                ? isDark ? ['#2D1B1B', '#1A1A1A'] : ['#FEF2F2', '#FFFFFF']
-                : riskLevel >= 40
-                ? isDark ? ['#2D2615', '#1A1A1A'] : ['#FFFBEB', '#FFFFFF']
-                : isDark ? ['#1B2D1F', '#1A1A1A'] : ['#F0FDF4', '#FFFFFF']
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+          <View
             style={{
-              borderRadius: 24,
+              borderRadius: 16,
               borderWidth: 1,
               borderColor: isDark ? '#2D2D2D' : '#E5E7EB',
-              padding: 24,
-              shadowColor: riskLevel >= 70 ? '#EF4444' : riskLevel >= 40 ? '#F59E0B' : '#10B981',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.1,
-              shadowRadius: 12,
-              elevation: 5,
+              padding: 16,
+              backgroundColor: isDark ? '#1F1F1F' : '#FFFFFF'
             }}
           >
             <Text style={{ 
               color: isDark ? '#9CA3AF' : '#6B7280' 
-            }} className="text-xs mb-2 tracking-wider">
+            }} className="text-[10px] mb-2 tracking-wider">
               MIGRAINE RISK INDEX
             </Text>
-            <View className="flex-row items-center justify-between mb-3">
+            <View className="flex-row items-center justify-between mb-2">
               <View className="flex-row items-end">
-                <Text style={{ color: isDark ? '#FFFFFF' : '#1F2937' }} className="text-6xl font-bold">{riskLevel}</Text>
-                <Text style={{ color: isDark ? '#FFFFFF' : '#1F2937' }} className="text-2xl font-bold mb-1.5">%</Text>
+                <Text style={{ color: isDark ? '#FFFFFF' : '#1F2937' }} className="text-5xl font-bold">{riskLevel}</Text>
+                <Text style={{ color: isDark ? '#FFFFFF' : '#1F2937' }} className="text-xl font-bold mb-1">%</Text>
               </View>
               
               {/* Circular Migraine Phase Indicator */}
               <View className="items-center">
-                <View style={{ position: 'relative', width: 90, height: 90 }}>
+                <View style={{ position: 'relative', width: 70, height: 70 }}>
                   <CircularProgress
-                    size={90}
-                    width={8}
+                    size={70}
+                    width={6}
                     fill={riskLevel}
                     tintColor={riskLevel >= 70 ? '#EF4444' : riskLevel >= 40 ? '#F59E0B' : '#10B981'}
                     backgroundColor={isDark ? '#2D2D2D' : '#E5E7EB'}
@@ -1119,14 +1208,14 @@ export default function DashboardScreen() {
                   >
                     {() => (
                       <View className="items-center justify-center">
-                        <Text style={{ fontSize: 24 }}>
+                        <Text style={{ fontSize: 20 }}>
                           {riskLevel >= 70 ? '🔴' : riskLevel >= 40 ? '🟡' : '🟢'}
                         </Text>
                         <Text 
                           style={{ 
                             color: isDark ? '#FFFFFF' : '#1F2937',
-                            fontSize: 9,
-                            marginTop: 2,
+                            fontSize: 8,
+                            marginTop: 1,
                           }} 
                           className="font-bold text-center"
                         >
@@ -1138,9 +1227,9 @@ export default function DashboardScreen() {
                 </View>
               </View>
             </View>
-            <View className="flex-row items-center mb-4">
-              <View className={`w-2.5 h-2.5 rounded-full ${riskColor} mr-2`} />
-              <Text style={{ color: isDark ? '#D1D5DB' : '#4B5563' }} className="text-base font-medium">{riskStatus} Risk</Text>
+            <View className="flex-row items-center mb-3">
+              <View className={`w-2 h-2 rounded-full ${riskColor} mr-2`} />
+              <Text style={{ color: isDark ? '#D1D5DB' : '#4B5563' }} className="text-sm font-medium">{riskStatus} Risk</Text>
               {isCollecting && (
                 <View className="ml-auto">
                   <View className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -1221,13 +1310,13 @@ export default function DashboardScreen() {
                 </Text>
               </View>
             )}
-          </LinearGradient>
+          </View>
         </Animated.View>
 
         {/* Quick Metrics */}
         <Animated.View 
           entering={FadeInUp.duration(600).delay(200)}
-          className="px-6 mb-4"
+          className="px-6 mb-3"
         >
           <View className="flex-row items-center justify-between mb-2.5">
             <Text style={{ color: colors.text }} className="text-lg font-bold">
@@ -1277,22 +1366,19 @@ export default function DashboardScreen() {
 
               return (
                 <View key={index} className="flex-1 mx-1">
-                  <LinearGradient
-                    colors={isDark 
-                      ? ['#1a1a1a', '#2D2D2D'] 
-                      : ['#FFFFFF', '#F9FAFB']
-                    }
+                  <View
                     style={{
-                      borderRadius: 16,
-                      padding: 12,
+                      borderRadius: 12,
+                      padding: 10,
                       borderWidth: 1,
                       borderColor: isDark ? '#2D2D2D' : colors.border,
                       alignItems: 'center',
+                      backgroundColor: isDark ? '#1a1a1a' : '#FFFFFF'
                     }}
                   >
                     <CircularProgress
-                      size={50}
-                      width={5}
+                      size={42}
+                      width={4}
                       fill={Math.min(100, Math.max(0, percentage))}
                       tintColor={progressColor}
                       backgroundColor={isDark ? '#1a1a1a' : '#e5e5e5'}
@@ -1300,27 +1386,27 @@ export default function DashboardScreen() {
                     >
                       {() => (
                         <View className="items-center">
-                          <Text style={{ color: colors.text }} className="text-sm font-bold">{metric.value}</Text>
+                          <Text style={{ color: colors.text }} className="text-xs font-bold">{metric.value}</Text>
                         </View>
                       )}
                     </CircularProgress>
                     
-                    <Text style={{ color: colors.text }} className="text-[11px] mt-1.5 font-semibold">{metric.label}</Text>
+                    <Text style={{ color: colors.text }} className="text-[10px] mt-1 font-semibold">{metric.label}</Text>
                     
                     <View className="flex-row items-center mt-0.5">
                       <Ionicons 
                         name={metric.trend === 'down' ? 'arrow-down' : 'arrow-up'} 
-                        size={10} 
+                        size={8} 
                         color={metric.trend === 'down' ? colors.error : colors.success}
                       />
                       <Text 
                         style={{ color: metric.trend === 'down' ? colors.error : colors.success }} 
-                        className="text-[9px] ml-0.5 font-semibold"
+                        className="text-[8px] ml-0.5 font-semibold"
                       >
                         {metric.change}
                       </Text>
                     </View>
-                  </LinearGradient>
+                  </View>
                 </View>
               );
             })}
@@ -1330,35 +1416,27 @@ export default function DashboardScreen() {
         {/* Water & Coffee Intake */}
         <Animated.View 
           entering={FadeInUp.duration(600).delay(350)}
-          className="px-6 mb-4"
+          className="px-6 mb-3"
         >
-          <Text style={{ color: colors.text }} className="text-lg font-bold mb-2.5">
+          <Text style={{ color: colors.text }} className="text-base font-bold mb-2">
             Daily Intake Tracker
           </Text>
           
-          <View className="flex-row" style={{ gap: 12 }}>
-            {/* Water Intake with Gradient */}
+          <View className="flex-row" style={{ gap: 10 }}>
+            {/* Water Intake */}
             <View className="flex-1">
-              <LinearGradient
-                colors={isDark 
-                  ? ['#1E3A5F', '#1A1A1A'] 
-                  : ['#E0F2FE', '#FFFFFF']
-                }
+              <View
                 style={{
-                  borderRadius: 16,
-                  padding: 12,
+                  borderRadius: 12,
+                  padding: 10,
                   borderWidth: 1,
-                  borderColor: isDark ? 'rgba(59, 130, 246, 0.3)' : '#BAE6FD',
-                  shadowColor: '#3B82F6',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 8,
-                  elevation: 5,
+                  borderColor: isDark ? '#2D2D2D' : '#E5E7EB',
+                  backgroundColor: isDark ? '#1F1F1F' : '#FFFFFF'
                 }}
               >
                 <View className="items-center mb-2">
-                  <Ionicons name="water" size={28} color="#3B82F6" />
-                  <Text style={{ color: colors.text }} className="text-xs font-semibold mt-1">Water</Text>
+                  <Ionicons name="water" size={24} color="#3B82F6" />
+                  <Text style={{ color: colors.text }} className="text-[10px] font-semibold mt-1">Water</Text>
                 </View>
                 
                 <View className="flex-row items-center justify-between mb-2">
@@ -1397,31 +1475,23 @@ export default function DashboardScreen() {
                     {waterIntake >= 8 ? '✓ Goal!' : `Goal: 8`}
                   </Text>
                 </View>
-              </LinearGradient>
+              </View>
             </View>
 
-            {/* Coffee Intake with Gradient */}
+            {/* Coffee Intake */}
             <View className="flex-1">
-              <LinearGradient
-                colors={isDark 
-                  ? ['#3A2817', '#1A1A1A'] 
-                  : ['#FEF3C7', '#FFFFFF']
-                }
+              <View
                 style={{
-                  borderRadius: 16,
-                  padding: 12,
+                  borderRadius: 12,
+                  padding: 10,
                   borderWidth: 1,
-                  borderColor: isDark ? 'rgba(146, 64, 14, 0.3)' : '#FDE68A',
-                  shadowColor: '#92400E',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 8,
-                  elevation: 5,
+                  borderColor: isDark ? '#2D2D2D' : '#E5E7EB',
+                  backgroundColor: isDark ? '#1F1F1F' : '#FFFFFF'
                 }}
               >
                 <View className="items-center mb-2">
-                  <Ionicons name="cafe" size={28} color="#92400E" />
-                  <Text style={{ color: colors.text }} className="text-xs font-semibold mt-1">Coffee</Text>
+                  <Ionicons name="cafe" size={24} color="#92400E" />
+                  <Text style={{ color: colors.text }} className="text-[10px] font-semibold mt-1">Coffee</Text>
                 </View>
                 
                 <View className="flex-row items-center justify-between mb-2">
@@ -1460,7 +1530,7 @@ export default function DashboardScreen() {
                     {coffeeIntake >= 3 ? '⚠️ High' : `Limit: 2-3`}
                   </Text>
                 </View>
-              </LinearGradient>
+              </View>
             </View>
           </View>
         </Animated.View>
@@ -1468,10 +1538,10 @@ export default function DashboardScreen() {
         {/* Top Contributing Triggers */}
         <Animated.View 
           entering={FadeInUp.duration(600).delay(300)}
-          className="px-6 mb-6"
+          className="px-6 mb-4"
         >
-          <View className="flex-row items-center justify-between mb-4">
-            <Text style={{ color: colors.text }} className="text-xl font-semibold">
+          <View className="flex-row items-center justify-between mb-3">
+            <Text style={{ color: colors.text }} className="text-base font-semibold">
               Your Tracked Triggers
             </Text>
             <TouchableOpacity onPress={() => setShowTriggersModal(true)}>
@@ -1525,21 +1595,23 @@ export default function DashboardScreen() {
         {/* AI Tip Card */}
         <Animated.View 
           entering={FadeInDown.duration(800).delay(400)}
-          className="mx-6 mb-4"
+          className="mx-6 mb-3"
         >
           <View style={{ 
-            backgroundColor: colors.card,
-          }} className="rounded-3xl p-4 border-2">
-            <View className="flex-row items-center mb-3">
-              <View style={{ backgroundColor: "black" }} className="w-10 h-10 rounded-2xl items-center justify-center mr-2.5">
-                <Ionicons name="sparkles" size={20} color="#fff" />
+            backgroundColor: isDark ? '#1F1F1F' : '#FFFFFF',
+            borderWidth: 1,
+            borderColor: isDark ? '#2D2D2D' : '#E5E7EB',
+          }} className="rounded-2xl p-3">
+            <View className="flex-row items-center mb-2">
+              <View style={{ backgroundColor: "black" }} className="w-8 h-8 rounded-xl items-center justify-center mr-2">
+                <Ionicons name="sparkles" size={16} color="#fff" />
               </View>
               <View className="flex-1">
-                <Text style={{ color: colors.text }} className="text-lg font-bold">AI Insights</Text>
-                <Text style={{ color: colors.textSecondary }} className="text-xs">Powered by Gemini</Text>
+                <Text style={{ color: colors.text }} className="text-base font-bold">AI Insights</Text>
+                <Text style={{ color: colors.textSecondary }} className="text-[10px]">Powered by Gemini</Text>
               </View>
             </View>
-            <Text style={{ color: colors.text }} className="text-sm leading-5 mb-3">
+            <Text style={{ color: colors.text }} className="text-xs leading-4 mb-2">
               {wearableData.hrv < 45 ? 
                 `Your HRV is at ${Math.round(wearableData.hrv)}ms (low). Consider reducing stress and getting quality sleep tonight.` :
                 wearableData.stress > 70 ?
@@ -1916,6 +1988,236 @@ export default function DashboardScreen() {
                 <Text style={{ color: isDark ? '#000000' : '#FFFFFF' }} className="text-center font-semibold">Close</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Streak Details Modal */}
+      <Modal
+        visible={showStreakModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowStreakModal(false)}
+      >
+        <View className="flex-1 bg-black/50 justify-end">
+          <View 
+            style={{ 
+              backgroundColor: isDark ? '#000000' : colors.background,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingTop: 8,
+              maxHeight: '75%',
+            }}
+            className="px-6 pb-8"
+          >
+            {/* Handle bar */}
+            <View className="items-center py-3">
+              <View style={{ backgroundColor: colors.border }} className="w-12 h-1.5 rounded-full" />
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {streakData && (
+                <>
+                  {/* Fire Icon Header */}
+                  <View className="items-center py-5">
+                    <View
+                      style={{
+                        backgroundColor: '#FFF7ED',
+                        shadowColor: '#F59E0B',
+                        shadowOffset: { width: 0, height: 8 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 12,
+                        elevation: 8,
+                      }}
+                      className="w-28 h-28 rounded-full items-center justify-center mb-4"
+                    >
+                      <Ionicons name="flame" size={64} color="#F59E0B" />
+                    </View>
+                    <Text style={{ color: colors.text }} className="text-3xl font-bold mb-2">
+                      {streakData.currentStreak} Day Streak!
+                    </Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-base text-center">
+                      {StreakService.getStreakMessage(streakData.currentStreak)}
+                    </Text>
+                  </View>
+
+                  {/* Stats Cards */}
+                  <View className="flex-row space-x-3 mb-5">
+                    <View 
+                      style={{ backgroundColor: isDark ? '#1a1a1a' : colors.surface }}
+                      className="flex-1 rounded-xl p-3.5 items-center"
+                    >
+                      <Text style={{ color: colors.textSecondary }} className="text-xs mb-1">
+                        Current
+                      </Text>
+                      <Text style={{ color: '#F59E0B' }} className="text-2xl font-bold">
+                        {streakData.currentStreak}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary }} className="text-xs">
+                        days
+                      </Text>
+                    </View>
+                    
+                    <View 
+                      style={{ backgroundColor: isDark ? '#1a1a1a' : colors.surface }}
+                      className="flex-1 rounded-xl p-4 items-center"
+                    >
+                      <Text style={{ color: colors.textSecondary }} className="text-xs mb-1">
+                        Longest
+                      </Text>
+                      <Text style={{ color: '#10B981' }} className="text-2xl font-bold">
+                        {streakData.longestStreak}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary }} className="text-xs">
+                        days
+                      </Text>
+                    </View>
+                    
+                    <View 
+                      style={{ backgroundColor: isDark ? '#1a1a1a' : colors.surface }}
+                      className="flex-1 rounded-xl p-4 items-center"
+                    >
+                      <Text style={{ color: colors.textSecondary }} className="text-xs mb-1">
+                        Total
+                      </Text>
+                      <Text style={{ color: '#3B82F6' }} className="text-2xl font-bold">
+                        {streakData.totalDays}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary }} className="text-xs">
+                        days
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Calendar View */}
+                  <View
+                    style={{ 
+                      backgroundColor: isDark ? '#000000' : '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: isDark ? '#2D2D2D' : colors.border,
+                    }}
+                    className="rounded-xl p-4 mb-6"
+                  >
+                    <Text style={{ color: isDark ? '#FFFFFF' : '#000000' }} className="text-lg font-bold mb-4">
+                      Last 7 Days
+                    </Text>
+                    
+                    <View className="flex-row justify-between">
+                      {StreakService.getLast7Days(streakData).map((day, index) => (
+                        <View key={index} className="items-center">
+                          <Text 
+                            style={{ color: isDark ? '#FFFFFF' : '#000000' }} 
+                            className="text-xs mb-2"
+                          >
+                            {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' })}
+                          </Text>
+                          <View
+                            style={{
+                              backgroundColor: day.opened 
+                                ? (day.isToday ? '#F59E0B' : '#10B981')
+                                : (isDark ? '#2D2D2D' : '#E5E7EB'),
+                              borderWidth: day.isToday ? 3 : 0,
+                              borderColor: '#F59E0B',
+                            }}
+                            className="w-12 h-12 rounded-full items-center justify-center"
+                          >
+                            {day.opened ? (
+                              <Ionicons name="checkmark" size={24} color="#FFFFFF" />
+                            ) : (
+                              <Text style={{ color: isDark ? '#9CA3AF' : '#6B7280' }} className="text-xl">•</Text>
+                            )}
+                          </View>
+                          <Text 
+                            style={{ color: isDark ? '#FFFFFF' : '#000000' }} 
+                            className="text-xs mt-1"
+                          >
+                            {new Date(day.date).getDate()}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Benefits */}
+                  <View
+                    style={{ 
+                      backgroundColor: isDark ? '#1a1a1a' : '#EFF6FF',
+                      borderLeftWidth: 4,
+                      borderLeftColor: '#3B82F6',
+                    }}
+                    className="rounded-xl p-4 mb-4"
+                  >
+                    <View className="flex-row items-center mb-2">
+                      <Ionicons name="information-circle" size={20} color="#3B82F6" />
+                      <Text 
+                        style={{ color: isDark ? colors.text : '#1E40AF' }} 
+                        className="text-sm font-semibold ml-2"
+                      >
+                        Why Track Daily?
+                      </Text>
+                    </View>
+                    <Text 
+                      style={{ color: isDark ? colors.textSecondary : '#3B82F6' }} 
+                      className="text-xs leading-5"
+                    >
+                      Daily monitoring helps our AI learn your unique patterns better. The more data we collect, the more accurate migraine predictions become!
+                    </Text>
+                  </View>
+
+                  {/* Milestones */}
+                  <View className="mb-6">
+                    <Text style={{ color: colors.text }} className="text-lg font-bold mb-3">
+                      Milestones
+                    </Text>
+                    {[
+                      { days: 3, emoji: '🌟', title: 'Getting Started', unlocked: streakData.longestStreak >= 3 },
+                      { days: 7, emoji: '⭐', title: 'One Week Strong', unlocked: streakData.longestStreak >= 7 },
+                      { days: 14, emoji: '💫', title: 'Two Weeks Champion', unlocked: streakData.longestStreak >= 14 },
+                      { days: 30, emoji: '🏆', title: 'Monthly Master', unlocked: streakData.longestStreak >= 30 },
+                    ].map((milestone, index) => (
+                      <View
+                        key={index}
+                        style={{
+                          backgroundColor: milestone.unlocked 
+                            ? (isDark ? '#1a1a1a' : colors.surface)
+                            : (isDark ? '#0a0a0a' : '#F3F4F6'),
+                          opacity: milestone.unlocked ? 1 : 0.5,
+                          borderWidth: 1,
+                          borderColor: milestone.unlocked 
+                            ? (isDark ? '#2D2D2D' : colors.border)
+                            : 'transparent',
+                        }}
+                        className="rounded-lg p-3 flex-row items-center mb-2"
+                      >
+                        <Text className="text-2xl mr-3">{milestone.emoji}</Text>
+                        <View className="flex-1">
+                          <Text style={{ color: colors.text }} className="text-sm font-semibold">
+                            {milestone.title}
+                          </Text>
+                          <Text style={{ color: colors.textSecondary }} className="text-xs">
+                            {milestone.days} days streak
+                          </Text>
+                        </View>
+                        {milestone.unlocked && (
+                          <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              onPress={() => setShowStreakModal(false)}
+              style={{ backgroundColor: '#F59E0B' }}
+              className="rounded-full py-4 mt-4"
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: '#FFFFFF' }} className="text-center font-semibold text-base">
+                Keep Going! 🔥
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

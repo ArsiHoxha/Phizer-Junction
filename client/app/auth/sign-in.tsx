@@ -28,7 +28,7 @@ export default function SignInScreen() {
       });
 
       await setActive({ session: result.createdSessionId });
-      router.replace('/onboarding/permissions');
+      router.replace('/onboarding/intro');
     } catch (err: any) {
       console.error(JSON.stringify(err, null, 2));
       Alert.alert('Error', err.errors?.[0]?.message || 'Sign in failed');

@@ -1830,12 +1830,15 @@ app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio
     // Convert audio to base64
     const audioBase64 = audioBuffer.toString('base64');
     
+    // ElevenLabs API key - fallback to hardcoded if env var not set
+    const elevenLabsKey = process.env.ELEVENLABS_API_KEY || 'sk_a547173ffd906dbb9e9450c126cdae4ed273a6b669966081';
+    
     // Connect to ElevenLabs WebSocket
     const ws = new WebSocket(
       `wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2`,
       {
         headers: {
-          'xi-api-key': process.env.ELEVENLABS_API_KEY || 'sk_46e01cad85b2f7f1e2c8570535befc8e23be2411dc5c11e0',
+          'xi-api-key': elevenLabsKey,
         },
       }
     );
@@ -1846,18 +1849,30 @@ app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio
     ws.on('open', () => {
       console.log('WebSocket connected to ElevenLabs');
       
-      // Send audio in chunks (max 16KB per chunk)
-      const chunkSize = 16000;
-      for (let i = 0; i < audioBase64.length; i += chunkSize) {
-        const chunk = audioBase64.slice(i, i + chunkSize);
-        const isLastChunk = i + chunkSize >= audioBase64.length;
-        
-        ws.send(JSON.stringify({
-          message_type: 'input_audio_chunk',
-          audio_base_64: chunk,
-          commit: isLastChunk,
-          sample_rate: 16000,
-        }));
+      try {
+        // Send audio in chunks (max 16KB per chunk)
+        const chunkSize = 16000;
+        for (let i = 0; i < audioBase64.length; i += chunkSize) {
+          const chunk = audioBase64.slice(i, i + chunkSize);
+          const isLastChunk = i + chunkSize >= audioBase64.length;
+          
+          ws.send(JSON.stringify({
+            message_type: 'input_audio_chunk',
+            audio_base_64: chunk,
+            commit: isLastChunk,
+            sample_rate: 16000,
+          }));
+        }
+      } catch (error) {
+        console.error('Error sending audio chunks:', error);
+        if (!isComplete && !res.headersSent) {
+          isComplete = true;
+          ws.close();
+          res.status(500).json({ 
+            error: 'Failed to process audio',
+            text: 'Could you please repeat that?'
+          });
+        }
       }
     });
 
@@ -1871,21 +1886,24 @@ app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio
       }
       
       if (message.message_type === 'committed_transcript' || message.message_type === 'scribe_error') {
-        isComplete = true;
-        ws.close();
-        
-        if (message.message_type === 'scribe_error') {
-          console.error('Scribe error:', message);
-          res.json({ text: 'Could you please repeat that?' });
-        } else {
-          res.json({ text: transcription || 'No transcription available' });
+        if (!isComplete && !res.headersSent) {
+          isComplete = true;
+          ws.close();
+          
+          if (message.message_type === 'scribe_error') {
+            console.error('Scribe error:', message);
+            res.json({ text: 'Could you please repeat that?' });
+          } else {
+            res.json({ text: transcription || 'No transcription available' });
+          }
         }
       }
     });
 
     ws.on('error', (error) => {
       console.error('WebSocket error:', error);
-      if (!isComplete) {
+      if (!isComplete && !res.headersSent) {
+        isComplete = true;
         res.status(500).json({ 
           error: 'Transcription failed',
           text: 'Could you please repeat that?'
@@ -1895,14 +1913,16 @@ app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio
 
     ws.on('close', () => {
       console.log('WebSocket closed');
-      if (!isComplete) {
+      if (!isComplete && !res.headersSent) {
+        isComplete = true;
         res.json({ text: transcription || 'Could you please repeat that?' });
       }
     });
 
     // Timeout after 30 seconds
     setTimeout(() => {
-      if (!isComplete) {
+      if (!isComplete && !res.headersSent) {
+        isComplete = true;
         ws.close();
         res.json({ text: transcription || 'Could you please repeat that?' });
       }

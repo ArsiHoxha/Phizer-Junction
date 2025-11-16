@@ -21,9 +21,9 @@ export default function ProfileScreen() {
   const [age, setAge] = useState('');
 
   const genderOptions = [
-    { id: 'female', label: 'Female', icon: 'female' },
-    { id: 'male', label: 'Male', icon: 'male' },
-    { id: 'other', label: 'Other', icon: 'transgender' },
+    { id: 'female', label: 'Female', icon: 'woman' },
+    { id: 'male', label: 'Male', icon: 'man' },
+    { id: 'other', label: 'Other', icon: 'people' },
     { id: 'prefer-not-to-say', label: 'Prefer not to say', icon: 'help-circle-outline' },
   ];
 
