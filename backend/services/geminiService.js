@@ -97,7 +97,7 @@ Keep it concise (max 300 words), empathetic, and actionable. Focus on the USER'S
 
 async function getTriggerInsights(triggerData) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
     const prompt = `You are a migraine specialist AI. Analyze these trigger factors and explain their impact:
 

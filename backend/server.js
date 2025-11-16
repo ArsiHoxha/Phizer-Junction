@@ -1809,45 +1809,107 @@ async function performAIAnalysis(migraineId, clerkId) {
 
 // ==================== MIGRAINE HELP VOICE ASSISTANT ====================
 
-// Transcribe audio using ElevenLabs Speech-to-Text
-app.post('/api/ai/transcribe-elevenlabs', requireAuth(), async (req, res) => {
+// Transcribe audio using ElevenLabs WebSocket API
+const multerSTT = require('multer');
+const uploadSTT = multerSTT({ storage: multerSTT.memoryStorage() });
+
+app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio'), async (req, res) => {
   try {
-    const multer = require('multer');
-    const upload = multer({ storage: multer.memoryStorage() });
-    
-    upload.single('audio')(req, res, async (err) => {
-      if (err) {
-        return res.status(400).json({ error: 'File upload error' });
-      }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file provided' });
+    }
 
-      if (!req.file) {
-        return res.status(400).json({ error: 'No audio file provided' });
-      }
-
-      const FormData = require('form-data');
-      const formData = new FormData();
-      formData.append('audio', req.file.buffer, {
-        filename: 'audio.m4a',
-        contentType: req.file.mimetype,
-      });
-      formData.append('model_id', 'eleven_multilingual_v2');
-
-      const axios = require('axios');
-      const response = await axios.post(
-        'https://api.elevenlabs.io/v1/speech-to-text',
-        formData,
-        {
-          headers: {
-            ...formData.getHeaders(),
-            'xi-api-key': process.env.ELEVENLABS_API_KEY || 'sk_46e01cad85b2f7f1e2c8570535befc8e23be2411dc5c11e0',
-          },
-        }
-      );
-
-      res.json({ text: response.data.text });
+    console.log('Received audio file:', {
+      size: req.file.size,
+      mimetype: req.file.mimetype,
     });
+
+    const WebSocket = require('ws');
+    const audioBuffer = req.file.buffer;
+    
+    // Convert audio to base64
+    const audioBase64 = audioBuffer.toString('base64');
+    
+    // Connect to ElevenLabs WebSocket
+    const ws = new WebSocket(
+      `wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2`,
+      {
+        headers: {
+          'xi-api-key': process.env.ELEVENLABS_API_KEY || 'sk_46e01cad85b2f7f1e2c8570535befc8e23be2411dc5c11e0',
+        },
+      }
+    );
+
+    let transcription = '';
+    let isComplete = false;
+
+    ws.on('open', () => {
+      console.log('WebSocket connected to ElevenLabs');
+      
+      // Send audio in chunks (max 16KB per chunk)
+      const chunkSize = 16000;
+      for (let i = 0; i < audioBase64.length; i += chunkSize) {
+        const chunk = audioBase64.slice(i, i + chunkSize);
+        const isLastChunk = i + chunkSize >= audioBase64.length;
+        
+        ws.send(JSON.stringify({
+          message_type: 'input_audio_chunk',
+          audio_base_64: chunk,
+          commit: isLastChunk,
+          sample_rate: 16000,
+        }));
+      }
+    });
+
+    ws.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      console.log('ElevenLabs message:', message.message_type);
+      
+      if (message.message_type === 'committed_transcript') {
+        transcription = message.text || '';
+        console.log('Transcription:', transcription);
+      }
+      
+      if (message.message_type === 'committed_transcript' || message.message_type === 'scribe_error') {
+        isComplete = true;
+        ws.close();
+        
+        if (message.message_type === 'scribe_error') {
+          console.error('Scribe error:', message);
+          res.json({ text: 'Could you please repeat that?' });
+        } else {
+          res.json({ text: transcription || 'No transcription available' });
+        }
+      }
+    });
+
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+      if (!isComplete) {
+        res.status(500).json({ 
+          error: 'Transcription failed',
+          text: 'Could you please repeat that?'
+        });
+      }
+    });
+
+    ws.on('close', () => {
+      console.log('WebSocket closed');
+      if (!isComplete) {
+        res.json({ text: transcription || 'Could you please repeat that?' });
+      }
+    });
+
+    // Timeout after 30 seconds
+    setTimeout(() => {
+      if (!isComplete) {
+        ws.close();
+        res.json({ text: transcription || 'Could you please repeat that?' });
+      }
+    }, 30000);
+
   } catch (error) {
-    console.error('ElevenLabs transcription error:', error);
+    console.error('Transcription error:', error.message);
     res.status(500).json({ 
       error: 'Transcription failed',
       text: 'Could you please repeat that?'
@@ -1909,7 +1971,7 @@ User's Current Health Data:`;
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.5-flash-lite',
       generationConfig: {
         temperature: 0.9,
         topP: 0.95,
@@ -1980,7 +2042,7 @@ User's Recent Health Snapshot:
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.5-flash-lite',
       generationConfig: {
         temperature: 0.9,
         topP: 0.95,
