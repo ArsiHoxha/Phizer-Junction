@@ -15,6 +15,7 @@ import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 
 const BACKEND_URL = 'https://phizer-junction.onrender.com';
 const ELEVENLABS_API_KEY = 'sk_a547173ffd906dbb9e9450c126cdae4ed273a6b669966081'; // Your ElevenLabs key
@@ -112,12 +113,23 @@ export default function MigraineHelpScreen() {
       setIsRecording(false);
       setIsProcessing(true);
 
+      console.log('Stopping recording...');
       await recording.stopAndUnloadAsync();
+      
       const uri = recording.getURI();
+      console.log('Recording URI:', uri);
       
       if (!uri) {
         throw new Error('No recording URI');
       }
+
+      // Check recording status
+      const status = await recording.getStatusAsync();
+      console.log('Recording status:', {
+        canRecord: status.canRecord,
+        isDoneRecording: status.isDoneRecording,
+        durationMillis: status.durationMillis,
+      });
 
       // Convert speech to text using backend
       const transcribedText = await transcribeAudio(uri);
@@ -149,19 +161,41 @@ export default function MigraineHelpScreen() {
       
       console.log('Audio URI:', audioUri);
       
+      // Get file info to check if it exists and has content
+      const fileInfo = await FileSystem.getInfoAsync(audioUri);
+      console.log('File info:', fileInfo);
+      
+      if (!fileInfo.exists) {
+        console.error('Audio file does not exist');
+        return 'Could not find the recording. Please try again.';
+      }
+      
+      if (fileInfo.size === 0) {
+        console.error('Audio file is empty');
+        return 'The recording is empty. Please try speaking again.';
+      }
+      
       // Create form data with the audio file
       const formData = new FormData();
       
       // For mobile, we need to properly format the file
       const filename = audioUri.split('/').pop() || 'recording.m4a';
       
-      formData.append('audio', {
-        uri: audioUri,
-        type: 'audio/x-m4a',
+      // Properly format for React Native
+      const file = {
+        uri: Platform.OS === 'ios' ? audioUri.replace('file://', '') : audioUri,
+        type: 'audio/m4a',
         name: filename,
-      } as any);
+      };
+      
+      formData.append('audio', file as any);
 
-      console.log('Sending audio to backend for transcription...');
+      console.log('Sending audio to backend:', {
+        uri: file.uri,
+        type: file.type,
+        name: file.name,
+        size: fileInfo.size,
+      });
 
       const transcriptionResponse = await axios.post(
         `${BACKEND_URL}/api/ai/transcribe-elevenlabs`,

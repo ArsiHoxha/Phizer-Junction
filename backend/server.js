@@ -1815,7 +1815,16 @@ const uploadSTT = multerSTT({ storage: multerSTT.memoryStorage() });
 
 app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio'), async (req, res) => {
   try {
+    // Debug: Log request details
+    console.log('Request received:', {
+      hasFile: !!req.file,
+      contentType: req.headers['content-type'],
+      bodyKeys: Object.keys(req.body || {}),
+      filesKeys: req.files ? Object.keys(req.files) : 'no files object',
+    });
+
     if (!req.file) {
+      console.error('No file in req.file');
       return res.status(400).json({ 
         error: 'No audio file provided',
         text: 'Could you please repeat that?'
@@ -1823,8 +1832,12 @@ app.post('/api/ai/transcribe-elevenlabs', requireAuth(), uploadSTT.single('audio
     }
 
     console.log('Received audio file:', {
-      size: req.file.size,
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      encoding: req.file.encoding,
       mimetype: req.file.mimetype,
+      size: req.file.size,
+      bufferLength: req.file.buffer ? req.file.buffer.length : 0,
     });
 
     // Check if audio file is empty
